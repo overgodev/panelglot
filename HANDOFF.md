@@ -1,9 +1,10 @@
-# Session Handoff — manga-image-translator local deployment
+# Session Handoff — panelglot local deployment
 
-Status as of 2026-08-15. This is a fork (`overgodev/manga-image-translator`) of
-`zyddnys/manga-image-translator`, set up as a local web translator backed by
-LM Studio running on the machine's RTX 3060 (12GB VRAM) / 32GB RAM (VM, RAM can
-be increased if needed).
+Status as of 2026-08-16. `panelglot` (`overgodev/panelglot`) is the renamed
+continuation of the `overgodev/manga-image-translator` fork of
+`zyddnys/manga-image-translator` — this is now the repo to work in. Set up as
+a local web translator backed by LM Studio running on the machine's RTX 3060
+(12GB VRAM) / 32GB RAM (VM, RAM can be increased if needed).
 
 ## How to run it
 
@@ -86,6 +87,109 @@ Commits `a1d60bf` → `7c73f1f` on `main`. Highlights:
   doubles detection+inpainting time), LLM Model selector, settings schema
   bumped a few times so old saved browser settings don't silently override
   new defaults.
+
+## Batch/whole-story translation (already in panelglot's initial commit)
+
+Uploading more than one file now routes through a new whole-story batch mode
+instead of translating pages one at a time:
+
+- Front end (`front/app/App.tsx`): `processTranslation()` now checks
+  `files.length > 1` and calls `processBatchTranslation()`, which OCRs every
+  queued page up front, sends them all to `/api/translate/batch/json-images`
+  in one request, and renders results back per-page. Files are tracked by a
+  generated `id` (`types.ts` `UploadedFile`) instead of filename, so same-name
+  uploads no longer collide.
+- Backend: new `/translate/batch/json-images` endpoint (`server/main.py`)
+  returns base64 PNG data URLs in input order via `get_batch_ctx`
+  (`server/request_extraction.py` → `BatchQueueElement`). The old
+  `/simple_execute/translate_batch` and `/execute/translate_batch` internal
+  stub endpoints (dead code, always returned empty results) were removed;
+  `server/instance.py` / `server/sent_data_internal.py` gained
+  `fetch_data_raw` / `fetch_data_stream_raw` for the worker RPC shape this
+  needs (arbitrary kwargs dict, not the fixed single-image `{image, config}`
+  shape `fetch_data` assumes).
+- **Not yet tested end-to-end** — this was in-progress work when it got
+  committed into panelglot's initial snapshot. Verify batch mode actually
+  works (multi-file upload → correct per-page results, correct target
+  language, no id/filename mismatches) before relying on it.
+
+## Fixed: batch translation "forgetting" everything past ~3 pages
+
+Reported symptom (after the batch feature above): translating a multi-page
+story still only carried context from roughly the last 3 pages, defeating
+the point of batching everything together.
+
+Root cause wasn't `--context-size 3` (that setting only matters between
+separate `translate()` calls, e.g. per-page mode) — in batch mode all pages'
+OCR'd text really does get combined into one `_translate()` call. The actual
+bug was inside `CustomOpenAiTranslator._translate()`
+(`manga_translator/translators/custom_openai.py`): when the combined text is
+too long for one prompt, `_assemble_prompts()` silently splits it into
+several sequential LLM requests (chunked by `_MAX_TOKENS`, a small
+~4096-character budget). Each request after the first started with **zero**
+memory of the previous one — so once a story's dialogue passed roughly 3
+pages' worth of text, translation continuity reset to blank at every chunk
+boundary. That's what looked like a hardcoded 3-page limit.
+
+Fix: `_translate()` now carries the immediately-preceding chunk's
+query→translation pairs forward as reference context for the next chunk,
+chained on top of whatever cross-page context (`context_size`) was already
+set, via a temporary override of `self.prev_context` restored in a
+`try`/`finally` once the whole call finishes (so it can't leak into
+unrelated calls).
+
+**Caveat**: only the *immediately preceding* chunk is carried forward
+(bounded on purpose, to avoid runaway prompt growth against a local LLM's
+limited context window) — not the full story's history. Consistency should
+no longer reset every ~3 pages, but very long-range callbacks (a name
+introduced in chunk 1, referenced again in chunk 10) still won't be
+perfectly preserved. **Not yet empirically verified** — needs a real
+multi-page batch run against LM Studio to confirm terminology actually stays
+consistent past the old 3-page boundary.
+
+## What's been fixed this session (2026-08-16): Thai target language
+
+Reported symptom: selecting Thai (`THA`) as target language with the
+`custom_openai` (LM Studio) translator produced English output with a layout
+that "didn't make sense." Three separate bugs, found by reading the actual
+`result/log_*.txt` output rather than guessing:
+
+- **No few-shot example for Thai**
+  (`manga_translator/translators/config_gpt.py`) — `_CHAT_SAMPLE` /
+  `_JSON_SAMPLE` only had entries for Chinese (Simplified), English, and
+  Korean. `_closest_sample_match()` uses `langcodes.closest_supported_match`
+  with `max_distance=5` to fuzzy-match `to_lang` against those keys; verified
+  directly that Thai's distance to all three exceeds that cutoff, so it
+  matched **nothing** — the LLM got zero example of correctly-formatted Thai
+  output. Added a Thai entry to both sample dicts.
+- **Root cause of the English fallback**
+  (`manga_translator/manga_translator.py`, `_dispatch_with_context`) — the
+  cross-page-context path (see `custom_openai` context wiring below) calls
+  `translator._translate(ctx.from_lang, config.translator.target_lang, texts)`
+  **directly**, bypassing `CommonTranslator.translate()` which normally
+  resolves the raw config code (`"THA"`) to the human-readable name
+  (`"Thai"`) via `parse_language_codes()`. The log showed the system prompt
+  literally saying *"Translate the following text into **THA**"* — the LLM
+  doesn't recognize the raw code and silently defaults to English. Fixed by
+  resolving `config.translator.target_lang` through `VALID_LANGUAGES` before
+  calling `_translate()`, matching what the normal path already does.
+- **Layout/orientation bug** (`manga_translator/utils/textblock.py`,
+  `LANGUAGE_ORIENTATION_PRESETS`) — Thai (`'THA'`) was missing from this
+  dict entirely. Every other alphabetic language (English, French, etc.) is
+  forced to horizontal (`'h'`); without an entry, `TextBlock.direction`
+  fell through to aspect-ratio auto-detection, which picks vertical layout
+  for tall/narrow bubbles (tuned for CJK). Thai script doesn't work stacked
+  vertically — that was the "layout doesn't make sense" complaint. Added
+  `'THA': 'h'`.
+
+**Not yet fixed, same class of bug**: `IND`, `SRP`, `CNR`, `HRV` are also
+missing from `LANGUAGE_ORIENTATION_PRESETS` and would hit the same
+vertical-layout issue if selected as target language. Flagged, not fixed —
+only Thai was reported/tested.
+
+All three fixes require a server restart to take effect (see "Lesson
+learned" below for how to do that safely) — not yet re-verified against a
+live translation after restart as of this writing.
 
 ## Known limitations (accepted, not actively being chased)
 
