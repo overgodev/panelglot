@@ -1,7 +1,7 @@
+import base64
 import io
 import json
-import pickle
-from typing import Mapping, Optional, Callable
+from typing import Mapping, Optional, Callable, List
 
 import aiohttp
 from PIL.Image import Image
@@ -9,71 +9,76 @@ from fastapi import HTTPException
 
 from manga_translator import Config
 
-# Trusted module prefixes for unpickling results from the locally spawned,
-# nonce-authenticated translator worker (mirrors manga_translator.mode.share).
-SAFE_RESULT_MODULE_PREFIXES = (
-    'builtins', 'collections', 'numpy', 'PIL.',
-    'manga_translator', 'pydantic', 'langcodes', 'shapely',
-)
+_CONFIG_EXTRA_ATTRS = ('_original_filename', '_is_web_frontend', '_web_frontend_optimized')
 
-class ResultUnpickler(pickle.Unpickler):
-    def find_class(self, module: str, name: str):
-        if module.startswith(SAFE_RESULT_MODULE_PREFIXES):
-            return super().find_class(module, name)
-        raise pickle.UnpicklingError(f"Deserialization of {module}.{name} is not allowed")
+def _config_extra(config: Config) -> dict:
+    extra = {}
+    for attr in _CONFIG_EXTRA_ATTRS:
+        value = getattr(config, attr, None)
+        if value is not None:
+            extra[attr] = value
+    return extra
 
-def result_loads(data: bytes):
-    return ResultUnpickler(io.BytesIO(data)).load()
+def encode_image_b64(image: Image) -> str:
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 NotifyType = Optional[Callable[[int, Optional[bytes]], None]]
 
-async def fetch_data_stream(url, image: Image, config: Config, sender: NotifyType, headers: Mapping[str, str] = {}):
-    attributes = {"image": image, "config": config}
-    data = pickle.dumps(attributes)
+async def fetch_data_stream(url, image: Image, config: Config, output_format: str, sender: NotifyType, headers: Mapping[str, str] = {}):
+    body = {
+        "image_b64": encode_image_b64(image),
+        "config": config.model_dump(mode="json"),
+        "config_extra": _config_extra(config),
+        "output_format": output_format,
+    }
+    data = json.dumps(body).encode("utf-8")
 
     async with aiohttp.ClientSession() as session:
-        async with session.post(url, data=data, headers=headers) as response:
+        async with session.post(url, data=data, headers={**headers, "Content-Type": "application/json"}) as response:
             if response.status == 200:
                 await process_stream(response, sender)
             else:
                 raise HTTPException(response.status, detail=await response.text())
 
-async def fetch_data(url, image: Image, config: Config, headers: Mapping[str, str] = {}):
-    attributes = {"image": image, "config": config}
-    data = pickle.dumps(attributes)
+async def fetch_data(url, image: Image, config: Config, output_format: str, headers: Mapping[str, str] = {}) -> bytes:
+    """Returns the final wire bytes for a single translate call - already
+    serialized worker-side into whichever output_format was requested."""
+    body = {
+        "image_b64": encode_image_b64(image),
+        "config": config.model_dump(mode="json"),
+        "config_extra": _config_extra(config),
+        "output_format": output_format,
+    }
+    data = json.dumps(body).encode("utf-8")
 
     async with aiohttp.ClientSession() as session:
-        async with session.post(url, data=data, headers=headers) as response:
+        async with session.post(url, data=data, headers={**headers, "Content-Type": "application/json"}) as response:
             if response.status == 200:
-                try:
-                    return result_loads(await response.read())
-                except pickle.UnpicklingError as e:
-                    raise HTTPException(502, detail=f'Invalid pickled response from upstream: {e}')
+                return await response.read()
             else:
                 raise HTTPException(response.status, detail=await response.text())
 
-async def fetch_data_raw(url, attributes: dict, headers: Mapping[str, str] = {}):
-    """Like fetch_data, but sends an arbitrary kwargs dict instead of the fixed
-    {image, config} shape - needed for worker methods (e.g. translate_batch)
-    whose signature doesn't match the single-image RPC calls."""
-    data = pickle.dumps(attributes)
+async def fetch_data_raw(url, body: dict, headers: Mapping[str, str] = {}) -> List[Optional[bytes]]:
+    """Batch counterpart of fetch_data - the worker responds with
+    {"results": [base64-or-null, ...]}; returns the decoded byte list."""
+    data = json.dumps(body).encode("utf-8")
 
     async with aiohttp.ClientSession() as session:
-        async with session.post(url, data=data, headers=headers) as response:
+        async with session.post(url, data=data, headers={**headers, "Content-Type": "application/json"}) as response:
             if response.status == 200:
-                try:
-                    return result_loads(await response.read())
-                except pickle.UnpicklingError as e:
-                    raise HTTPException(502, detail=f'Invalid pickled response from upstream: {e}')
+                payload = json.loads(await response.read())
+                return [base64.b64decode(item) if item is not None else None for item in payload["results"]]
             else:
                 raise HTTPException(response.status, detail=await response.text())
 
-async def fetch_data_stream_raw(url, attributes: dict, sender: NotifyType, headers: Mapping[str, str] = {}):
+async def fetch_data_stream_raw(url, body: dict, sender: NotifyType, headers: Mapping[str, str] = {}):
     """Streaming counterpart of fetch_data_raw."""
-    data = pickle.dumps(attributes)
+    data = json.dumps(body).encode("utf-8")
 
     async with aiohttp.ClientSession() as session:
-        async with session.post(url, data=data, headers=headers) as response:
+        async with session.post(url, data=data, headers={**headers, "Content-Type": "application/json"}) as response:
             if response.status == 200:
                 await process_stream(response, sender)
             else:
@@ -107,4 +112,3 @@ def extract_header(buffer):
     status = int.from_bytes(buffer[0:1], byteorder='big')
     expected_size = int.from_bytes(buffer[1:5], byteorder='big')
     return status, expected_size
-

@@ -14,8 +14,9 @@ class QueueElement:
     req: Request
     image: Image.Image | str
     config: Config
+    output_format: str
 
-    def __init__(self, req: Request, image: Image.Image, config: Config, length):
+    def __init__(self, req: Request, image: Image.Image, config: Config, length, output_format: str = "json"):
         self.req = req
         if length > 10:
             #todo: store image in "upload-cache" folder
@@ -23,6 +24,7 @@ class QueueElement:
         else:
             self.image = image
         self.config = config
+        self.output_format = output_format
 
     def get_image(self)-> Image:
         if isinstance(self.image, str):
@@ -46,12 +48,14 @@ class BatchQueueElement:
     images: List[Image.Image]
     config: Config
     batch_size: int
+    output_format: str
 
-    def __init__(self, req: Request, images: List[Image.Image], config: Config, batch_size: int):
+    def __init__(self, req: Request, images: List[Image.Image], config: Config, batch_size: int, output_format: str = "json"):
         self.req = req
         self.images = images
         self.config = config
         self.batch_size = batch_size
+        self.output_format = output_format
 
     async def is_client_disconnected(self) -> bool:
         if await self.req.is_disconnected():
@@ -114,15 +118,15 @@ async def wait_in_queue(task: QueueElement | BatchQueueElement, notify: NotifyTy
                 # Process batch translation task
                 if isinstance(task, BatchQueueElement):
                     if notify:
-                        await instance.sent_batch_stream(task.images, task.config, task.batch_size, notify)
+                        await instance.sent_batch_stream(task.images, task.config, task.batch_size, task.output_format, notify)
                     else:
-                        result = await instance.sent_batch(task.images, task.config, task.batch_size)
+                        result = await instance.sent_batch(task.images, task.config, task.batch_size, task.output_format)
                 else:
                     # Process single translation task
                     if notify:
-                        await instance.sent_stream(task.image, task.config, notify)
+                        await instance.sent_stream(task.image, task.config, task.output_format, notify)
                     else:
-                        result = await instance.sent(task.image, task.config)
+                        result = await instance.sent(task.image, task.config, task.output_format)
 
                 await executor_instances.free_executor(instance)
 

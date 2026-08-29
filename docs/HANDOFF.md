@@ -426,6 +426,75 @@ Port these modules 1:1, matching the existing module boundaries:
    the manual-start instructions above) over to the TS server, then
    delete the Python `server/` tree.
 
+## Done: removed the pickle boundary between orchestrator and worker (2026-08-29)
+
+Landed the "pickle-removal" preliminary step from the TS-rewrite plan above,
+as a Python-only change (see that section's "Why this isn't a drop-in
+rewrite" for the original motivation). Every public `/translate/*` route's
+request/response shape is unchanged; only the internal orchestrator↔worker
+wire protocol changed:
+
+- Request (orchestrator → worker) is now JSON, not pickle: images are
+  PNG-encoded + base64'd, `Config` round-trips via `model_dump(mode="json")`/
+  `model_validate()`. A new `output_format` field (`"image"|"json"|"bytes"`)
+  tells the worker which final shape to produce — every orchestrator call
+  site already knew this statically (it's what `transform_to_json/bytes/
+  image` used to encode), so it's just threaded down instead of decided
+  after the fact.
+- Response serialization moved into the worker
+  (`manga_translator/mode/share.py`): `server/api/to_json.py`'s
+  `Translation`/`TranslationResponse`/`to_translation()` moved verbatim to
+  new `manga_translator/mode/response.py` (needs numpy/cv2/`TextBlock` —
+  belongs in the ML package, not `server/`, and this is exactly what
+  HANDOFF's TS-rewrite section flagged as unportable to Node). The worker
+  now PNG-encodes / builds+serializes `TranslationResponse` itself before
+  responding; the orchestrator only ever forwards already-finished bytes.
+- `Config`'s three ad hoc non-field attributes (`_original_filename`,
+  `_is_web_frontend`, `_web_frontend_optimized`, set directly on instances
+  in `server/main.py`) rode along "for free" under pickle (it serializes
+  full instance `__dict__`) but are invisible to `model_dump()`. Fixed by
+  having `server/core/instance.py`/`sent_data_internal.py` pull them into a
+  sibling `config_extra` dict on the wire, reapplied via `setattr()` in
+  `share.py` before the config reaches `MangaTranslator.translate()`. If a
+  new ad hoc `_`-prefixed `Config` attribute is ever added, it must be
+  added to `_CONFIG_EXTRA_ATTRS` in both of those orchestrator files or it
+  will silently stop reaching the worker.
+- `output_format` plumbed through `QueueElement`/`BatchQueueElement`
+  (`server/core/myqueue.py`) alongside `config`, and through
+  `get_ctx`/`while_streaming`/`get_batch_ctx`
+  (`server/api/request_extraction.py`) as a new parameter each
+  `server/main.py` route now passes explicitly instead of a
+  `transform_to_*` function (deleted).
+- Batch (`translate_batch`) results: the worker serializes each `Context`
+  in the list individually and returns `{"results": [base64-or-null, ...]}`
+  as its response body (non-streaming) or as the streaming protocol's
+  single status-0 payload — same per-image `None`-for-missing-result
+  semantics `batch_json_images` already had. Assembling those into a zip
+  (`batch_images`) or a base64 data-URL list (`batch_json_images`) stays in
+  `server/main.py` since it's plain bytes plumbing, not `Context`/numpy
+  work.
+- `server/core/streaming.py`'s `notify()` and `server/core/
+  sent_data_internal.py`'s `fetch_data*` functions simplified accordingly —
+  no more `pickle.loads`/`ResultUnpickler`/`RestrictedUnpickler` anywhere
+  in this leg.
+
+**Not yet verified against a live run** — this was implemented and
+syntax-checked (`ast.parse` on every touched file; the sandbox this was
+done in has no project venv, so `import manga_translator`/`import
+server.main` could not be run) but not exercised against a real LM
+Studio + GPU server. First thing next session: start the server per "How
+to run it" above and hit every route in the verification list from the
+session's plan (`/translate/json`, `/bytes`, `/image`, their `/stream`
+and `with-form` variants, and the three batch endpoints) with a real
+image, and confirm the queue-position/progress-report chunks (status
+1/3/4) still arrive during streaming.
+
+## Plan: rewrite `server/` (API orchestration layer) from Python to TypeScript — remaining steps
+
+Step 1 above ("Land the pickle-removal change") is done. Steps 2–4 (stand
+up `server-ts/`, port route-by-route, flip the launcher over) are
+unchanged from the original plan below and still not started.
+
 ### Open questions to resolve before starting
 
 - Whether to keep the worker on FastAPI/uvicorn (Python) indefinitely,

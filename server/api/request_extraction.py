@@ -50,38 +50,41 @@ async def to_pil_image(image: Union[str, bytes]) -> Image.Image:
         raise HTTPException(status_code=422, detail=str(e))
 
 
-async def get_ctx(req: Request, config: Config, image: str|bytes):
+async def get_ctx(req: Request, config: Config, image: str|bytes, output_format: str = "json") -> bytes:
+    """Returns the final wire bytes (already serialized worker-side in the
+    requested output_format)."""
     image = await to_pil_image(image)
 
-    task = QueueElement(req, image, config, 0)
+    task = QueueElement(req, image, config, 0, output_format)
     task_queue.add_task(task)
 
     return await wait_in_queue(task, None)
 
-async def while_streaming(req: Request, transform, config: Config, image: bytes | str):
+async def while_streaming(req: Request, config: Config, image: bytes | str, output_format: str = "json"):
     image = await to_pil_image(image)
 
-    task = QueueElement(req, image, config, 0)
+    task = QueueElement(req, image, config, 0, output_format)
     task_queue.add_task(task)
 
     messages = asyncio.Queue()
 
     def notify_internal(code: int, data: bytes) -> None:
-        notify(code, data, transform, messages)
+        notify(code, data, messages)
     streaming_response = StreamingResponse(stream(messages), media_type="application/octet-stream")
     asyncio.create_task(wait_in_queue(task, notify_internal))
     return streaming_response
 
-async def get_batch_ctx(req: Request, config: Config, images: list[str|bytes], batch_size: int = 4):
-    """Process batch translation request"""
+async def get_batch_ctx(req: Request, config: Config, images: list[str|bytes], batch_size: int = 4, output_format: str = "json") -> list:
+    """Process batch translation request. Returns a list of already-serialized
+    wire bytes (or None for a failed/placeholder-free entry), one per image."""
     # Convert images to PIL Image objects
     pil_images = []
     for img in images:
         pil_img = await to_pil_image(img)
         pil_images.append(pil_img)
-    
+
     # Create batch task
-    batch_task = BatchQueueElement(req, pil_images, config, batch_size)
+    batch_task = BatchQueueElement(req, pil_images, config, batch_size, output_format)
     task_queue.add_task(batch_task)
-    
+
     return await wait_in_queue(batch_task, None)

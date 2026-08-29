@@ -5,7 +5,20 @@ from PIL import Image
 from pydantic import BaseModel
 
 from manga_translator import Config
-from server.core.sent_data_internal import fetch_data_stream, NotifyType, fetch_data, fetch_data_raw, fetch_data_stream_raw
+from server.core.sent_data_internal import fetch_data_stream, NotifyType, fetch_data, fetch_data_raw, fetch_data_stream_raw, encode_image_b64
+
+_CONFIG_EXTRA_ATTRS = ('_original_filename', '_is_web_frontend', '_web_frontend_optimized')
+
+def _config_extra(config: Config) -> dict:
+    """Ad hoc, non-field attributes server/main.py sets directly on a Config
+    instance. model_dump() only covers declared fields, so these ride alongside
+    as a separate dict for the worker to reapply."""
+    extra = {}
+    for attr in _CONFIG_EXTRA_ATTRS:
+        value = getattr(config, attr, None)
+        if value is not None:
+            extra[attr] = value
+    return extra
 
 class ExecutorInstance(BaseModel):
     ip: str
@@ -19,23 +32,35 @@ class ExecutorInstance(BaseModel):
     def _headers(self):
         return {"X-Nonce": self.nonce} if self.nonce else {}
 
-    async def sent(self, image: Image, config: Config):
-        return await fetch_data("http://"+self.ip+":"+str(self.port)+"/simple_execute/translate", image, config, headers=self._headers())
+    async def sent(self, image: Image, config: Config, output_format: str):
+        return await fetch_data("http://"+self.ip+":"+str(self.port)+"/simple_execute/translate", image, config, output_format, headers=self._headers())
 
-    async def sent_stream(self, image: Image, config: Config, sender: NotifyType):
-        await fetch_data_stream("http://"+self.ip+":"+str(self.port)+"/execute/translate", image, config, sender, headers=self._headers())
+    async def sent_stream(self, image: Image, config: Config, output_format: str, sender: NotifyType):
+        await fetch_data_stream("http://"+self.ip+":"+str(self.port)+"/execute/translate", image, config, output_format, sender, headers=self._headers())
 
-    async def sent_batch(self, images: List[Image.Image], config: Config, batch_size: int):
+    async def sent_batch(self, images: List[Image.Image], config: Config, batch_size: int, output_format: str):
         """发送批量翻译请求"""
-        images_with_configs = [(image, config) for image in images]
+        body = {
+            "images_b64": [encode_image_b64(image) for image in images],
+            "config": config.model_dump(mode="json"),
+            "config_extra": _config_extra(config),
+            "batch_size": batch_size,
+            "output_format": output_format,
+        }
         return await fetch_data_raw("http://"+self.ip+":"+str(self.port)+"/simple_execute/translate_batch",
-                               {"images_with_configs": images_with_configs, "batch_size": batch_size}, headers=self._headers())
+                               body, headers=self._headers())
 
-    async def sent_batch_stream(self, images: List[Image.Image], config: Config, batch_size: int, sender: NotifyType):
+    async def sent_batch_stream(self, images: List[Image.Image], config: Config, batch_size: int, output_format: str, sender: NotifyType):
         """发送批量翻译流式请求"""
-        images_with_configs = [(image, config) for image in images]
+        body = {
+            "images_b64": [encode_image_b64(image) for image in images],
+            "config": config.model_dump(mode="json"),
+            "config_extra": _config_extra(config),
+            "batch_size": batch_size,
+            "output_format": output_format,
+        }
         await fetch_data_stream_raw("http://"+self.ip+":"+str(self.port)+"/execute/translate_batch",
-                               {"images_with_configs": images_with_configs, "batch_size": batch_size}, sender, headers=self._headers())
+                               body, sender, headers=self._headers())
 
 class Executors:
     def __init__(self):

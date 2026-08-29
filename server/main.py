@@ -13,17 +13,17 @@ from typing import Optional
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 
-from fastapi import FastAPI, Request, HTTPException, Header, UploadFile, File, Form
+from fastapi import FastAPI, Request, HTTPException, Header, UploadFile, File, Form, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
 from manga_translator import Config
+from manga_translator.mode.response import TranslationResponse
 from server.core.instance import ExecutorInstance, executor_instances
 from server.core.myqueue import task_queue
 from server.api.request_extraction import get_ctx, while_streaming, TranslateRequest, BatchTranslateRequest, get_batch_ctx
-from server.api.to_json import to_translation, TranslationResponse
 
 app = FastAPI()
 nonce = None
@@ -51,83 +51,56 @@ async def register_instance(instance: ExecutorInstance, req: Request, req_nonce:
     instance.ip = req.client.host
     executor_instances.register(instance)
 
-def transform_to_image(ctx):
-    # 检查是否使用占位符（在web模式下final.png保存后会设置此标记）
-    if hasattr(ctx, 'use_placeholder') and ctx.use_placeholder:
-        # ctx.result已经是1x1占位符图片，快速传输
-        img_byte_arr = io.BytesIO()
-        ctx.result.save(img_byte_arr, format="PNG")
-        return img_byte_arr.getvalue()
-
-    # 返回完整的翻译结果
-    img_byte_arr = io.BytesIO()
-    ctx.result.save(img_byte_arr, format="PNG")
-    return img_byte_arr.getvalue()
-
-def transform_to_json(ctx):
-    return to_translation(ctx).model_dump_json().encode("utf-8")
-
-def transform_to_bytes(ctx):
-    return to_translation(ctx).to_bytes()
-
 @app.post("/translate/json", response_model=TranslationResponse, tags=["api", "json"],response_description="json strucure inspired by the ichigo translator extension")
 async def json(req: Request, data: TranslateRequest):
-    ctx = await get_ctx(req, data.config, data.image)
-    return to_translation(ctx)
+    result_bytes = await get_ctx(req, data.config, data.image, output_format="json")
+    return Response(content=result_bytes, media_type="application/json")
 
 @app.post("/translate/bytes", response_class=StreamingResponse, tags=["api", "json"],response_description="custom byte structure for decoding look at examples in 'examples/response.*'")
 async def bytes(req: Request, data: TranslateRequest):
-    ctx = await get_ctx(req, data.config, data.image)
-    return StreamingResponse(content=to_translation(ctx).to_bytes())
+    result_bytes = await get_ctx(req, data.config, data.image, output_format="bytes")
+    return Response(content=result_bytes, media_type="application/octet-stream")
 
 @app.post("/translate/image", response_description="the result image", tags=["api", "json"],response_class=StreamingResponse)
-async def image(req: Request, data: TranslateRequest) -> StreamingResponse:
-    ctx = await get_ctx(req, data.config, data.image)
-    img_byte_arr = io.BytesIO()
-    ctx.result.save(img_byte_arr, format="PNG")
-    img_byte_arr.seek(0)
-
-    return StreamingResponse(img_byte_arr, media_type="image/png")
+async def image(req: Request, data: TranslateRequest) -> Response:
+    result_bytes = await get_ctx(req, data.config, data.image, output_format="image")
+    return Response(content=result_bytes, media_type="image/png")
 
 @app.post("/translate/json/stream", response_class=StreamingResponse,tags=["api", "json"], response_description="A stream over elements with strucure(1byte status, 4 byte size, n byte data) status code are 0,1,2,3,4 0 is result data, 1 is progress report, 2 is error, 3 is waiting queue position, 4 is waiting for translator instance")
 async def stream_json(req: Request, data: TranslateRequest) -> StreamingResponse:
-    return await while_streaming(req, transform_to_json, data.config, data.image)
+    return await while_streaming(req, data.config, data.image, output_format="json")
 
 @app.post("/translate/bytes/stream", response_class=StreamingResponse, tags=["api", "json"],response_description="A stream over elements with strucure(1byte status, 4 byte size, n byte data) status code are 0,1,2,3,4 0 is result data, 1 is progress report, 2 is error, 3 is waiting queue position, 4 is waiting for translator instance")
 async def stream_bytes(req: Request, data: TranslateRequest)-> StreamingResponse:
-    return await while_streaming(req, transform_to_bytes,data.config, data.image)
+    return await while_streaming(req, data.config, data.image, output_format="bytes")
 
 @app.post("/translate/image/stream", response_class=StreamingResponse, tags=["api", "json"], response_description="A stream over elements with strucure(1byte status, 4 byte size, n byte data) status code are 0,1,2,3,4 0 is result data, 1 is progress report, 2 is error, 3 is waiting queue position, 4 is waiting for translator instance")
 async def stream_image(req: Request, data: TranslateRequest) -> StreamingResponse:
-    return await while_streaming(req, transform_to_image, data.config, data.image)
+    return await while_streaming(req, data.config, data.image, output_format="image")
 
 @app.post("/translate/with-form/json", response_model=TranslationResponse, tags=["api", "form"],response_description="json strucure inspired by the ichigo translator extension")
 async def json_form(req: Request, image: UploadFile = File(...), config: str = Form("{}")):
     img = await image.read()
     conf = Config.parse_raw(config)
     conf._original_filename = image.filename
-    ctx = await get_ctx(req, conf, img)
-    return to_translation(ctx)
+    result_bytes = await get_ctx(req, conf, img, output_format="json")
+    return Response(content=result_bytes, media_type="application/json")
 
 @app.post("/translate/with-form/bytes", response_class=StreamingResponse, tags=["api", "form"],response_description="custom byte structure for decoding look at examples in 'examples/response.*'")
 async def bytes_form(req: Request, image: UploadFile = File(...), config: str = Form("{}")):
     img = await image.read()
     conf = Config.parse_raw(config)
     conf._original_filename = image.filename
-    ctx = await get_ctx(req, conf, img)
-    return StreamingResponse(content=to_translation(ctx).to_bytes())
+    result_bytes = await get_ctx(req, conf, img, output_format="bytes")
+    return Response(content=result_bytes, media_type="application/octet-stream")
 
 @app.post("/translate/with-form/image", response_description="the result image", tags=["api", "form"],response_class=StreamingResponse)
-async def image_form(req: Request, image: UploadFile = File(...), config: str = Form("{}")) -> StreamingResponse:
+async def image_form(req: Request, image: UploadFile = File(...), config: str = Form("{}")) -> Response:
     img = await image.read()
     conf = Config.parse_raw(config)
     conf._original_filename = image.filename
-    ctx = await get_ctx(req, conf, img)
-    img_byte_arr = io.BytesIO()
-    ctx.result.save(img_byte_arr, format="PNG")
-    img_byte_arr.seek(0)
-
-    return StreamingResponse(img_byte_arr, media_type="image/png")
+    result_bytes = await get_ctx(req, conf, img, output_format="image")
+    return Response(content=result_bytes, media_type="image/png")
 
 @app.post("/translate/with-form/json/stream", response_class=StreamingResponse, tags=["api", "form"],response_description="A stream over elements with strucure(1byte status, 4 byte size, n byte data) status code are 0,1,2,3,4 0 is result data, 1 is progress report, 2 is error, 3 is waiting queue position, 4 is waiting for translator instance")
 async def stream_json_form(req: Request, image: UploadFile = File(...), config: str = Form("{}")) -> StreamingResponse:
@@ -136,7 +109,7 @@ async def stream_json_form(req: Request, image: UploadFile = File(...), config: 
     # 标记这是Web前端调用，用于占位符优化
     conf._is_web_frontend = True
     conf._original_filename = image.filename
-    return await while_streaming(req, transform_to_json, conf, img)
+    return await while_streaming(req, conf, img, output_format="json")
 
 
 
@@ -145,7 +118,7 @@ async def stream_bytes_form(req: Request, image: UploadFile = File(...), config:
     img = await image.read()
     conf = Config.parse_raw(config)
     conf._original_filename = image.filename
-    return await while_streaming(req, transform_to_bytes, conf, img)
+    return await while_streaming(req, conf, img, output_format="bytes")
 
 @app.post("/translate/with-form/image/stream", response_class=StreamingResponse, tags=["api", "form"], response_description="Standard streaming endpoint - returns complete image data. Suitable for API calls and scripts.")
 async def stream_image_form(req: Request, image: UploadFile = File(...), config: str = Form("{}")) -> StreamingResponse:
@@ -155,7 +128,7 @@ async def stream_image_form(req: Request, image: UploadFile = File(...), config:
     # 标记为通用模式，不使用占位符优化
     conf._web_frontend_optimized = False
     conf._original_filename = image.filename
-    return await while_streaming(req, transform_to_image, conf, img)
+    return await while_streaming(req, conf, img, output_format="image")
 
 @app.post("/translate/with-form/image/stream/web", response_class=StreamingResponse, tags=["api", "form"], response_description="Web frontend optimized streaming endpoint - uses placeholder optimization for faster response.")
 async def stream_image_form_web(req: Request, image: UploadFile = File(...), config: str = Form("{}")) -> StreamingResponse:
@@ -165,7 +138,7 @@ async def stream_image_form_web(req: Request, image: UploadFile = File(...), con
     # 标记为Web前端优化模式，使用占位符优化
     conf._web_frontend_optimized = True
     conf._original_filename = image.filename
-    return await while_streaming(req, transform_to_image, conf, img)
+    return await while_streaming(req, conf, img, output_format="image")
 
 @app.post("/queue-size", response_model=int, tags=["api", "json"])
 async def queue_size() -> int:
@@ -200,33 +173,31 @@ async def get_result_by_folder(folder_name: str):
 @app.post("/translate/batch/json", response_model=list[TranslationResponse], tags=["api", "json", "batch"])
 async def batch_json(req: Request, data: BatchTranslateRequest):
     """Batch translate images and return JSON format results"""
-    results = await get_batch_ctx(req, data.config, data.images, data.batch_size)
-    return [to_translation(ctx) for ctx in results]
+    results = await get_batch_ctx(req, data.config, data.images, data.batch_size, output_format="json")
+    return [TranslationResponse.model_validate_json(r) for r in results]
 
 @app.post("/translate/batch/images", response_description="Zip file containing translated images", tags=["api", "batch"])
 async def batch_images(req: Request, data: BatchTranslateRequest):
     """Batch translate images and return zip archive containing translated images"""
     import zipfile
     import tempfile
-    
-    results = await get_batch_ctx(req, data.config, data.images, data.batch_size)
-    
+
+    results = await get_batch_ctx(req, data.config, data.images, data.batch_size, output_format="image")
+
     # Create temporary ZIP file
     with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_file:
         with zipfile.ZipFile(tmp_file, 'w') as zip_file:
-            for i, ctx in enumerate(results):
-                if ctx.result:
-                    img_byte_arr = io.BytesIO()
-                    ctx.result.save(img_byte_arr, format="PNG")
-                    zip_file.writestr(f"translated_{i+1}.png", img_byte_arr.getvalue())
-        
+            for i, png_bytes in enumerate(results):
+                if png_bytes is not None:
+                    zip_file.writestr(f"translated_{i+1}.png", png_bytes)
+
         # Return ZIP file
         with open(tmp_file.name, 'rb') as f:
             zip_data = f.read()
-        
+
         # Clean up temporary file
         os.unlink(tmp_file.name)
-        
+
         return StreamingResponse(
             io.BytesIO(zip_data),
             media_type="application/zip",
@@ -238,13 +209,11 @@ async def batch_json_images(req: Request, data: BatchTranslateRequest):
     """Batch-translate all given images together (OCR'd up front, then translated as a single
     combined pass so the translator sees the whole story's text at once for better cross-page
     context) and return the final rendered pages as base64 PNG data URLs, in input order."""
-    results = await get_batch_ctx(req, data.config, data.images, data.batch_size)
+    results = await get_batch_ctx(req, data.config, data.images, data.batch_size, output_format="image")
     encoded: list[Optional[str]] = []
-    for ctx in results:
-        if ctx.result:
-            img_byte_arr = io.BytesIO()
-            ctx.result.save(img_byte_arr, format="PNG")
-            encoded.append("data:image/png;base64," + base64.b64encode(img_byte_arr.getvalue()).decode("utf-8"))
+    for png_bytes in results:
+        if png_bytes is not None:
+            encoded.append("data:image/png;base64," + base64.b64encode(png_bytes).decode("utf-8"))
         else:
             encoded.append(None)
     return encoded
