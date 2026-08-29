@@ -302,3 +302,142 @@ the `demo/doc` anchor is gone. `docs/UPSTREAM_README*.md` still reference
 `demo/doc/*.yml` — left as-is since those files are preserved,
 unmodified copies of the *upstream* project's own docs (per the note at
 the top of `README.md`), not this fork's active documentation.
+
+## Plan: rewrite `server/` (API orchestration layer) from Python to TypeScript
+
+Not started — this is the plan for a future session, written 2026-08-29.
+Scope note first: **only `server/` moves.** The `manga_translator/`
+package (detection/OCR/inpainting/translation/rendering, all torch/cv2/
+numpy-backed) stays Python — there is no realistic TS port of that, and
+no reason to attempt one. `server/` itself is comparatively thin: HTTP
+API surface, a request queue, an executor registry that proxies requests
+to one or more worker processes, and static file serving of `result/`.
+That's a good fit for Node — the question is entirely about the wire
+protocol between orchestrator and worker, which is the one piece that
+doesn't translate directly.
+
+### Why this isn't a drop-in rewrite: the pickle boundary
+
+Today's flow is `front → server/main.py (FastAPI) → queue/instance
+registry → worker (manga_translator/mode/share.py, a separate `python -m
+manga_translator shared` process)`. The server↔worker leg
+(`server/core/sent_data_internal.py` + `manga_translator/mode/share.py`)
+is **not** a translation-specific API — it's a generic reflective RPC
+bridge: the server pickles `{**kwargs}` (a PIL `Image`, a pydantic
+`Config`), POSTs it to `/execute/{method_name}` or
+`/simple_execute/{method_name}`, and the worker does
+`getattr(self.manga, method_name)(**attr)` and pickles back whatever
+Python object that method returns — for `translate`, a full `Context`
+with numpy arrays, PIL images, and `TextBlock` objects. `server/main.py`
+then calls `transform_to_image`/`to_json`/`to_bytes`
+(`server/api/to_json.py`) **on that raw `Context`** to produce the
+client-facing response. A Node process cannot unpickle any of this —
+there is no equivalent of Python's object graph pickling available, and
+reimplementing enough of `numpy`'s pickle format plus `TextBlock`'s
+class shape in TS is not worth attempting.
+
+So the wire protocol has to change first, independent of language:
+
+1. **Move response serialization into the worker.** `to_json.py`'s
+   `to_translation()` / `Translation.to_bytes()` and the
+   `ctx.result.save(..., format="PNG")` PNG-encode step currently run in
+   `server/main.py` after unpickling. They need to move into
+   `manga_translator/mode/share.py` (or a new sibling module) so the
+   worker itself produces the *final* wire payload — PNG bytes, the
+   existing custom binary `Translation`/`TranslationResponse` format
+   (already just base64/struct-packed primitives, nothing Python-specific), or a plain JSON body — and
+   the orchestrator never needs to touch a `Context`, numpy array, or PIL
+   image again. This means the worker's `/execute/{method_name}` /
+   `/simple_execute/{method_name}` endpoints stop being fully generic;
+   they need to know which output shape the caller wants (an
+   `output_format` field in the request, e.g. `image|json|bytes`) and
+   apply the corresponding transform before responding.
+2. **Replace pickle with JSON (+ base64 for binary blobs) on the
+   remaining orchestrator↔worker traffic**: the request side (image
+   bytes + `Config`) and the streaming progress-report envelope
+   (`server/core/streaming.py` / `sent_data_internal.py`'s 1-byte
+   status + 4-byte length framing can stay as-is — that framing is
+   already language-agnostic; only the payload inside status `0`
+   changes from a pickled `Context` to the pre-serialized bytes from
+   step 1). `Config` is already a pydantic model — it round-trips
+   through `.model_dump_json()`/`.parse_raw()` today for the multipart
+   form endpoints, so JSON is not a new capability, just making it the
+   only capability.
+3. **Register/nonce handshake** (`/register`, `X-Nonce` header) is
+   already plain HTTP + JSON — no change needed there.
+
+This is worth doing as its own preliminary change, landed and verified
+against the *existing* Python `server/`, before writing a single line of
+TS — it's the part with the most room for silent bugs (e.g. re-deriving
+`text_region.translation` vs. the `ctx.translations` dict correctly, per
+the desync bug fixed earlier this session) and is much easier to debug
+Python-to-Python than across a language boundary.
+
+### TS server scope (once the wire protocol is JSON-clean)
+
+Port these modules 1:1, matching the existing module boundaries:
+
+- `server/core/myqueue.py` → an in-memory queue (array + event emitter
+  in place of `asyncio.Event`) — `QueueElement`/`BatchQueueElement`,
+  `wait_in_queue`. Client-disconnect detection needs Node's request
+  `close`/`aborted` event in place of `req.is_disconnected()`.
+- `server/core/instance.py` → `ExecutorInstance`/`Executors`, using
+  `fetch`/`undici` instead of `aiohttp` for the worker calls.
+- `server/core/sent_data_internal.py` → simplifies a lot post-pickle:
+  just JSON POST + the existing binary stream framing (a small
+  `Buffer`-based reader replacing `handle_buffer`/`extract_header`).
+- `server/api/request_extraction.py` → `to_pil_image` has no TS
+  equivalent need (no local image decoding required — the worker still
+  does OCR/decoding in Python) but the *shape* (accept multipart, raw
+  bytes, base64 data URL, or a remote URL fetch) has to be preserved for
+  the front end's existing requests; forward the bytes through
+  untouched rather than decoding them.
+- `server/main.py` → route definitions (Express or Fastify; pick
+  Fastify — it has first-class TS support and schema validation, which
+  maps naturally onto porting the pydantic `Config`/`TranslateRequest`/
+  `BatchTranslateRequest` models to `zod` schemas generated once from
+  `manga_translator/config.py` and kept in sync manually, same as the
+  front end likely already duplicates some of this shape in
+  `front/app/types.ts` — check for reuse there first). Worker process
+  spawn/watchdog (`start_translator_client_proc`, `watch_worker`) ports
+  directly to Node's `child_process.spawn` + a `setInterval` poll.
+  Static `result/` serving and the zip endpoints
+  (`/results/download-all`, `/translate/batch/images`) need a zip
+  library (`archiver` or `jszip`) in place of Python's `zipfile`.
+
+### Suggested sequencing
+
+1. Land the pickle-removal change (Python-only, see above) and re-verify
+   all existing endpoints still work against the current Python
+   `server/` — this de-risks the rewrite by removing the one piece that
+   isn't a mechanical port.
+2. Stand up the new TS server as `server-ts/` (or similar) alongside the
+   existing Python one, targeting the *same* worker process and the
+   *same* routes/response shapes, so the front end (`front/`) needs zero
+   changes to switch between them — this makes A/B testing and rollback
+   trivial.
+3. Port route-by-route, cross-checking each against the Python
+   version's behavior for the same request (there's no test suite for
+   `server/` today — `test/test_translation.py` covers `manga_translator/`
+   internals, not the HTTP layer — so this has to be manual/curl-based
+   verification per endpoint, including the streaming and batch ones,
+   which are the most likely to have subtle framing bugs).
+4. Once parity is confirmed, flip `scripts/start-web-server.bat` (and
+   the manual-start instructions above) over to the TS server, then
+   delete the Python `server/` tree.
+
+### Open questions to resolve before starting
+
+- Whether to keep the worker on FastAPI/uvicorn (Python) indefinitely,
+  or eventually also move `manga_translator/mode/share.py`'s *HTTP
+  layer* (not the ML pipeline) to a thin TS shim that shells out to a
+  Python subprocess per-call instead of long-running HTTP — deferred;
+  not needed for this rewrite and adds risk for no clear benefit given
+  the worker already works reliably as a long-lived process (see
+  "Lesson learned" above on why long-lived out-of-session processes
+  matter here).
+- Whether `front/`'s dev server should reverse-proxy to the TS server
+  directly (same-origin, avoiding the current CORS-wildcard
+  `allow_origins=["*"]` on the Python server) now that both sides are
+  Node-ecosystem — worth reconsidering `CORSMiddleware`'s wildcard as
+  part of this rewrite rather than porting it as-is.
