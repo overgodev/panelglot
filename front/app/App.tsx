@@ -479,6 +479,7 @@ export const App: React.FC = () => {
           customBoxThreshold,
           maskDilationOffset,
           inpainter,
+          colorizer,
         };
         
         const finishedImage: FinishedImage = {

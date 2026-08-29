@@ -30,9 +30,6 @@ export const ImageHandlingArea: React.FC<ImageHandlingAreaProps> = ({
   clearForm,
   removeFile,
 }) => {
-  if (files.length > 0) {
-    console.log("UploadArea rendering", fileStatuses.get(files[0].id));
-  }
   return (
     <div className="space-y-4 max-w-[1200px] mx-auto">
       {!isProcessing && !isProcessingAllFinished && (
