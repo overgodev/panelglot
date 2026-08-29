@@ -6,20 +6,15 @@
 - 🔄 Real-time translation status updates
 - 🚀 Server-side rendering
 - ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
 - 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
+- 🔒 TypeScript by default
 
 ## Tech Stack
 
-- **Framework**: React 18
-- **Build Tool**: Vite
+- **Framework**: Nuxt 3 (Vue 3)
+- **Runtime/Package manager**: Bun
 - **Styling**: TailwindCSS
 - **Language**: TypeScript
-- **Icons**: Iconify
-- **State Management**: React Hooks
 - **API Communication**: Fetch API with streaming support
 
 ## Getting Started
@@ -29,7 +24,7 @@
 Install the dependencies:
 
 ```bash
-npm install
+bun install
 ```
 
 ### Development
@@ -42,17 +37,23 @@ https://github.com/zyddnys/manga-image-translator
 Start the development server with HMR:
 
 ```bash
-npm run dev
+bun run dev
 ```
 
-Your application will be available at `http://localhost:5173`.
+Your application will be available at `http://localhost:3000`.
 
 ## Building for Production
 
 Create a production build:
 
 ```bash
-npm run build
+bun run build
+```
+
+Preview the production build:
+
+```bash
+bun run preview
 ```
 
 ## Image

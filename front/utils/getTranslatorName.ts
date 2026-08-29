@@ -1,4 +1,4 @@
-import type { TranslatorKey } from "@/types";
+import type { TranslatorKey } from "~/types";
 
 export function getTranslatorName(key: TranslatorKey): string {
   if (key === "none") return "No Text";

@@ -1,4 +1,4 @@
-import type { StatusKey } from "@/types";
+import type { StatusKey } from "~/types";
 
 export const fetchStatusText = (
   status: StatusKey | null,
