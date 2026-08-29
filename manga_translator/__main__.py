@@ -6,7 +6,7 @@ from argparse import Namespace
 
 from manga_translator import Config
 from manga_translator.args import parser, reparse
-from .manga_translator import (
+from .pipeline import (
     set_main_logger, load_dictionary, apply_dictionary,
 )
 from .args import parser

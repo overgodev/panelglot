@@ -8,7 +8,7 @@ import numpy as np
 import py3langid as langid
 from shapely.geometry import Polygon, MultiPoint
 
-from .generic2 import color_difference, is_right_to_left_char, is_valuable_char
+from .text_utils import color_difference, is_right_to_left_char, is_valuable_char
 
 # determines render direction
 LANGUAGE_ORIENTATION_PRESETS = {

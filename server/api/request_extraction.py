@@ -12,8 +12,8 @@ from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 
 from manga_translator import Config
-from server.myqueue import task_queue, wait_in_queue, QueueElement, BatchQueueElement
-from server.streaming import notify, stream
+from server.core.myqueue import task_queue, wait_in_queue, QueueElement, BatchQueueElement
+from server.core.streaming import notify, stream
 
 class TranslateRequest(BaseModel):
     """This request can be a multipart or a json request"""

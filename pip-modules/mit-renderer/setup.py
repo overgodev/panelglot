@@ -11,7 +11,7 @@ FILES = {
     "text_render_eng.py": "manga_translator/rendering/text_render_eng.py",
     "text_render.py": "manga_translator/rendering/text_render.py",
     "utils/textblock.py": "manga_translator/utils/textblock.py",
-    "utils/generic2.py": "manga_translator/utils/generic2.py",
+    "utils/generic2.py": "manga_translator/utils/text_utils.py",
 }
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))

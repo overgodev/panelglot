@@ -21,12 +21,12 @@
     "upscale_ratio": null
   },
   "translator": {
-    "translator": "offline",
-    "target_lang": "CHS",
+    "translator": "custom_openai",
+    "target_lang": "ENG",
     "no_text_lang_skip": false,
     "skip_lang": null,
     "gpt_config": null,
-    "translator_chain": "sugoi:ENG;papago:CHS",
+    "translator_chain": null,
     "selective_translation": null
   },
   "detector": {

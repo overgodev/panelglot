@@ -9,19 +9,19 @@ changes, a second OCR backend, cross-page LLM context, a reworked web UI,
 crash-resilient worker process, dead-code removal — that it's tracked here as
 its own project rather than a PR-sized fork. All credit for the original
 pipeline, model training, and architecture goes to the upstream project and
-its contributors; see `UPSTREAM_README.md` for the original project's full
+its contributors; see `docs/UPSTREAM_README.md` for the original project's full
 documentation (installation matrix, Docker, CLI flags, supported languages,
 API reference, etc. — most of that still applies here unchanged).
 
 ## What's different from upstream
 
-See `HANDOFF.md` for the detailed log. Highlights:
+See `docs/HANDOFF.md` for the detailed log. Highlights:
 
 - Local setup driven by **LM Studio** (OpenAI-compatible endpoint) instead of
   a hosted translation API — see `.env` and the `custom_openai` translator.
 - Windows/LAN server fixes (worker registration, nonce auth, response
   parsing) in `server/*.py`.
-- Detector/renderer defaults tuned from empirical testing (see `HANDOFF.md`
+- Detector/renderer defaults tuned from empirical testing (see `docs/HANDOFF.md`
   for what was tried and why).
 - Cross-page translation context wired into `custom_openai`.
 - A second OCR backend (PP-OCRv6 / `rapidocr`) for multi-script pages.
@@ -32,7 +32,7 @@ See `HANDOFF.md` for the detailed log. Highlights:
 
 ## Running it
 
-Double-click **`start-web-server.bat`**. It starts the web server on
+Double-click **`scripts/start-web-server.bat`**. It starts the web server on
 `0.0.0.0:8000` with GPU enabled. Make sure LM Studio's server is running with
 a Sugoi model loaded first.
 
@@ -43,7 +43,7 @@ cd server
 ```
 
 For dependency installation, Docker, CLI usage, and everything else not
-specific to this fork's local setup, see `UPSTREAM_README.md`.
+specific to this fork's local setup, see `docs/UPSTREAM_README.md`.
 
 ## License
 

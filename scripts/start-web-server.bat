@@ -22,7 +22,7 @@ echo  Close this window to stop the server.
 echo ============================================================
 echo.
 
-cd server
-"%~dp0venv\Scripts\python.exe" main.py --start-instance --host 0.0.0.0 --use-gpu
+cd /d "%~dp0..\server"
+"%~dp0..\venv\Scripts\python.exe" main.py --start-instance --host 0.0.0.0 --use-gpu
 
 pause

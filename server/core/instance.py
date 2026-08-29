@@ -5,7 +5,7 @@ from PIL import Image
 from pydantic import BaseModel
 
 from manga_translator import Config
-from server.sent_data_internal import fetch_data_stream, NotifyType, fetch_data, fetch_data_raw, fetch_data_stream_raw
+from server.core.sent_data_internal import fetch_data_stream, NotifyType, fetch_data, fetch_data_raw, fetch_data_stream_raw
 
 class ExecutorInstance(BaseModel):
     ip: str
@@ -64,7 +64,7 @@ class Executors:
             return instance
 
     async def free_executor(self, instance: ExecutorInstance):
-        from server.myqueue import task_queue
+        from server.core.myqueue import task_queue
         instance.free_executor()
         self.event.set()
         self.event.clear()

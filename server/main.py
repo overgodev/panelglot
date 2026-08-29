@@ -20,10 +20,10 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
 from manga_translator import Config
-from server.instance import ExecutorInstance, executor_instances
-from server.myqueue import task_queue
-from server.request_extraction import get_ctx, while_streaming, TranslateRequest, BatchTranslateRequest, get_batch_ctx
-from server.to_json import to_translation, TranslationResponse
+from server.core.instance import ExecutorInstance, executor_instances
+from server.core.myqueue import task_queue
+from server.api.request_extraction import get_ctx, while_streaming, TranslateRequest, BatchTranslateRequest, get_batch_ctx
+from server.api.to_json import to_translation, TranslationResponse
 
 app = FastAPI()
 nonce = None
@@ -252,14 +252,14 @@ async def batch_json_images(req: Request, data: BatchTranslateRequest):
 @app.get("/", response_class=HTMLResponse,tags=["ui"])
 async def index() -> HTMLResponse:
     script_directory = Path(__file__).parent
-    html_file = script_directory / "index.html"
+    html_file = script_directory / "web" / "index.html"
     html_content = html_file.read_text(encoding="utf-8")
     return HTMLResponse(content=html_content)
 
 @app.get("/manual", response_class=HTMLResponse, tags=["ui"])
 async def manual():
     script_directory = Path(__file__).parent
-    html_file = script_directory / "manual.html"
+    html_file = script_directory / "web" / "manual.html"
     html_content = html_file.read_text(encoding="utf-8")
     return HTMLResponse(content=html_content)
 

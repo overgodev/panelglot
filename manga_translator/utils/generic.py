@@ -13,7 +13,7 @@ import einops
 import json
 from shapely import affinity
 from shapely.geometry import Polygon, MultiPoint
-from .generic2 import *
+from .text_utils import *
 
 try:
     functools.cached_property

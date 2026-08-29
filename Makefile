@@ -9,8 +9,8 @@ run-web-server:
 		--host=0.0.0.0 \
 		--port=5003 \
 		--entrypoint python \
-		-v /demo/doc/../../result:/app/result \
-		-v /demo/doc/../../server/main.py:/app/server/main.py \
-		-v /demo/doc/../../server/instance.py:/app/server/instance.py \	
+		-v ./result:/app/result \
+		-v ./server/main.py:/app/server/main.py \
+		-v ./server/core/instance.py:/app/server/core/instance.py \
 		zyddnys/manga-image-translator:main \
 		server/main.py --verbose --start-instance --host=0.0.0.0 --port=5003 --use-gpu

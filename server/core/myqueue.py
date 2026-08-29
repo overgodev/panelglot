@@ -7,8 +7,8 @@ from fastapi import HTTPException
 from fastapi.requests import Request
 
 from manga_translator import Config
-from server.instance import executor_instances
-from server.sent_data_internal import NotifyType
+from server.core.instance import executor_instances
+from server.core.sent_data_internal import NotifyType
 
 class QueueElement:
     req: Request

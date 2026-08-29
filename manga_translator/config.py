@@ -34,8 +34,8 @@ class TranslatorChain:
         """
         Returns True if the chain contains offline translators.
         """
-        from manga_translator.translators import OFFLINE_TRANSLATORS
-        return any(translator in OFFLINE_TRANSLATORS for translator in self.translators)
+        # No offline translator backends remain (LM Studio / custom_openai only).
+        return False
 
     def __eq__(self, __o: object) -> bool:
         if type(__o) is str:
@@ -109,43 +109,19 @@ class Ocr(str, Enum):
     ppocr = "ppocr"
 
 class Translator(str, Enum):
-    youdao = "youdao"
-    baidu = "baidu"
-    deepl = "deepl"
-    papago = "papago"
-    caiyun = "caiyun"
-    chatgpt = "chatgpt"
-    chatgpt_2stage = "chatgpt_2stage"
     none = "none"
     original = "original"
-    sakura = "sakura"
-    deepseek = "deepseek"
-    groq = "groq"
-    gemini = "gemini"
-    gemini_2stage = "gemini_2stage"
     custom_openai = "custom_openai"
-    offline = "offline"
-    nllb = "nllb"
-    nllb_big = "nllb_big"
-    sugoi = "sugoi"
-    jparacrawl = "jparacrawl"
-    jparacrawl_big = "jparacrawl_big"
-    m2m100 = "m2m100"
-    m2m100_big = "m2m100_big"
-    m2m100_hf = "m2m100_hf"
-    m2m100_hf_big = "m2m100_hf_big"
-    mbart50 = "mbart50"
-    qwen2 = "qwen2"
-    qwen2_big = "qwen2_big"
 
     def __str__(self):
         return self.name
 
-    # Map 'openai' and any translator starting with 'gpt'* to 'chatgpt'
+    # Map 'openai' and any translator starting with 'gpt'* to the local LM Studio /
+    # OpenAI-compatible backend.
     @classmethod
     def _missing_(cls, value):
         if value.startswith('gpt') or value == 'openai':
-            return cls.chatgpt
+            return cls.custom_openai
         raise ValueError(f"{value} is not a valid {cls.__name__}")
 
 
@@ -218,7 +194,7 @@ class UpscaleConfig(BaseModel):
     """Image upscale ratio applied before detection. Can improve text detection."""
 
 class TranslatorConfig(BaseModel):
-    translator: Translator = Translator.sugoi
+    translator: Translator = Translator.custom_openai
     """Language translator to use"""
     target_lang: str = 'ENG' #todo: validate VALID_LANGUAGES #todo: convert to enum
     """Destination language"""

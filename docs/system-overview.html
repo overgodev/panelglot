@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>panelglot — System Overview</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3350;
+    --accent: #6c8ef5;
+    --accent2: #a78bfa;
+    --green: #34d399;
+    --yellow: #fbbf24;
+    --red: #f87171;
+    --orange: #fb923c;
+    --cyan: #22d3ee;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --small: 0.78rem;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    padding: 2rem;
+  }
+  h1 { font-size: 1.8rem; font-weight: 700; color: var(--accent); margin-bottom: 0.25rem; }
+  .subtitle { color: var(--muted); font-size: var(--small); margin-bottom: 2rem; }
+  h2 { font-size: 1.05rem; font-weight: 600; color: var(--accent2); margin-bottom: 1rem; letter-spacing: 0.04em; text-transform: uppercase; }
+  h3 { font-size: 0.85rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.5rem; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+  .full { grid-column: 1 / -1; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+  }
+  .card-accent { border-left: 3px solid var(--accent); }
+  .card-green { border-left: 3px solid var(--green); }
+  .card-yellow { border-left: 3px solid var(--yellow); }
+  .card-red { border-left: 3px solid var(--red); }
+  .card-orange { border-left: 3px solid var(--orange); }
+  .card-cyan { border-left: 3px solid var(--cyan); }
+  .card-purple { border-left: 3px solid var(--accent2); }
+
+  /* ── Architecture diagram ── */
+  .arch {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .arch-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 0;
+  }
+
+  .box {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    font-size: 0.82rem;
+    text-align: center;
+    min-width: 130px;
+    background: var(--surface2);
+    flex-shrink: 0;
+    position: relative;
+  }
+  .box-label { font-weight: 600; }
+  .box-sub { font-size: 0.7rem; color: var(--muted); margin-top: 0.15rem; }
+  .box.blue  { border-color: var(--accent);  background: rgba(108,142,245,0.08); }
+  .box.green { border-color: var(--green);   background: rgba(52,211,153,0.08);  }
+  .box.yellow{ border-color: var(--yellow);  background: rgba(251,191,36,0.08);  }
+  .box.purple{ border-color: var(--accent2); background: rgba(167,139,250,0.08); }
+  .box.red   { border-color: var(--red);     background: rgba(248,113,113,0.08); }
+  .box.cyan  { border-color: var(--cyan);    background: rgba(34,211,238,0.08);  }
+  .box.orange{ border-color: var(--orange);  background: rgba(251,146,60,0.08);  }
+
+  .arrow { color: var(--muted); font-size: 1.1rem; padding: 0 0.5rem; flex-shrink: 0; }
+  .arrow-down { text-align: center; color: var(--muted); font-size: 0.9rem; padding: 0.2rem 0; }
+
+  /* ── Pipeline steps ── */
+  .pipeline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+  }
+  .step-box {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.45rem 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-align: center;
+    min-width: 100px;
+    background: var(--surface2);
+  }
+  .step-num {
+    font-size: 0.65rem;
+    color: var(--muted);
+  }
+  .step-sub { font-size: 0.65rem; color: var(--muted); text-align: center; max-width: 100px; }
+  .pipe-arrow { color: var(--muted); font-size: 0.9rem; padding-top: 0.5rem; }
+
+  /* ── Tables ── */
+  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  th { text-align: left; color: var(--muted); font-weight: 600; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); }
+  td { padding: 0.4rem 0.5rem; border-bottom: 1px solid rgba(46,51,80,0.5); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .tag {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: rgba(108,142,245,0.15);
+    color: var(--accent);
+  }
+  .tag.green  { background: rgba(52,211,153,0.15);  color: var(--green);  }
+  .tag.yellow { background: rgba(251,191,36,0.15);  color: var(--yellow); }
+  .tag.red    { background: rgba(248,113,113,0.15); color: var(--red);    }
+  .tag.purple { background: rgba(167,139,250,0.15); color: var(--accent2);}
+  .tag.orange { background: rgba(251,146,60,0.15);  color: var(--orange); }
+
+  code {
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+    font-size: 0.78rem;
+    color: var(--cyan);
+  }
+
+  .note {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 0.4rem;
+    padding-left: 0.5rem;
+    border-left: 2px solid var(--border);
+  }
+
+  ul { padding-left: 1.1rem; font-size: 0.82rem; }
+  ul li { margin-bottom: 0.25rem; }
+  ul li::marker { color: var(--muted); }
+
+  .badge {
+    display: inline-block;
+    padding: 0.05rem 0.4rem;
+    border-radius: 99px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    background: rgba(52,211,153,0.2);
+    color: var(--green);
+    border: 1px solid rgba(52,211,153,0.3);
+    margin-left: 0.35rem;
+    vertical-align: middle;
+  }
+  .badge.warn { background: rgba(251,191,36,0.2); color: var(--yellow); border-color: rgba(251,191,36,0.3); }
+  .badge.info { background: rgba(108,142,245,0.2); color: var(--accent);  border-color: rgba(108,142,245,0.3); }
+
+  .section-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 2rem 0;
+  }
+
+  .legend { display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.75rem; color: var(--muted); margin-bottom: 1rem; }
+  .legend-item { display: flex; align-items: center; gap: 0.35rem; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<h1>panelglot</h1>
+<div class="subtitle">System overview — generated 2026-08-29 · local deployment on RTX 3060 / 32 GB RAM</div>
+
+<!-- ═══ ARCHITECTURE ═══ -->
+<div class="card card-accent" style="margin-bottom:1.5rem">
+  <h2>Architecture</h2>
+
+  <div style="overflow-x:auto">
+  <div style="display:flex; flex-direction:column; gap:0.6rem; min-width:700px">
+
+    <!-- Row 1: User -->
+    <div style="display:flex; align-items:center; gap:0.5rem; justify-content:center">
+      <div class="box blue">
+        <div class="box-label">Browser</div>
+        <div class="box-sub">server/web/index.html<br>(Petite Vue + UnoCSS)</div>
+      </div>
+      <div style="color:var(--muted);padding:0 0.25rem">⟷</div>
+      <div class="box" style="min-width:110px">
+        <div class="box-label" style="color:var(--muted);font-size:0.72rem">DEV only</div>
+        <div class="box-sub">front/ React app<br>(react-router v7 + Vite)</div>
+      </div>
+    </div>
+
+    <div class="arrow-down">↓ HTTP / SSE stream</div>
+
+    <!-- Row 2: FastAPI -->
+    <div style="display:flex; align-items:center; gap:0.5rem; justify-content:center">
+      <div class="box green" style="min-width:380px">
+        <div class="box-label">FastAPI Server <span style="font-weight:400;font-size:0.72rem">server/main.py</span></div>
+        <div class="box-sub">:8000 · CORS · static /result · worker watchdog</div>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:3rem; justify-content:center">
+      <div class="arrow-down" style="flex:1;text-align:right">↓ subprocess RPC</div>
+      <div class="arrow-down" style="flex:1;text-align:left">↓ /results/download-all etc.</div>
+    </div>
+
+    <!-- Row 3: Worker + Result FS -->
+    <div style="display:flex; align-items:flex-start; gap:1rem; justify-content:center">
+      <div class="box yellow" style="min-width:200px">
+        <div class="box-label">Worker Process</div>
+        <div class="box-sub">manga_translator shared<br>:8001 · nonce auth · GPU</div>
+      </div>
+      <div style="color:var(--muted);padding-top:0.6rem">↔</div>
+      <div class="box cyan" style="min-width:160px">
+        <div class="box-label">Result FS</div>
+        <div class="box-sub">result/{folder}/final.png<br>original_name.txt</div>
+      </div>
+      <div style="color:var(--muted);padding-top:0.6rem">↔</div>
+      <div class="box orange" style="min-width:160px">
+        <div class="box-label">LM Studio</div>
+        <div class="box-sub">:1234 · OpenAI-compat API<br>Sugoi 14B / 32B</div>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:1.5rem; justify-content:center; padding-left:1rem">
+      <div class="arrow-down">↓ runs ML pipeline</div>
+    </div>
+
+    <!-- Row 4: Pipeline modules -->
+    <div style="display:flex; align-items:center; gap:0.4rem; justify-content:center; flex-wrap:wrap">
+      <div class="box purple" style="min-width:90px"><div class="box-sub" style="color:var(--accent2)">Detection</div></div>
+      <div style="color:var(--muted)">→</div>
+      <div class="box purple" style="min-width:70px"><div class="box-sub" style="color:var(--accent2)">OCR</div></div>
+      <div style="color:var(--muted)">→</div>
+      <div class="box purple" style="min-width:110px"><div class="box-sub" style="color:var(--accent2)">Textline Merge</div></div>
+      <div style="color:var(--muted)">→</div>
+      <div class="box purple" style="min-width:100px"><div class="box-sub" style="color:var(--accent2)">Mask Gen</div></div>
+      <div style="color:var(--muted)">→</div>
+      <div class="box purple" style="min-width:90px"><div class="box-sub" style="color:var(--accent2)">Inpainting</div></div>
+      <div style="color:var(--muted)">→</div>
+      <div class="box purple" style="min-width:90px"><div class="box-sub" style="color:var(--accent2)">Upscaling<br><span style="font-size:0.62rem">(opt-in)</span></div></div>
+      <div style="color:var(--muted)">→</div>
+      <div class="box orange" style="min-width:100px"><div class="box-sub" style="color:var(--orange)">Translation<br><span style="font-size:0.62rem">LM Studio</span></div></div>
+      <div style="color:var(--muted)">→</div>
+      <div class="box purple" style="min-width:90px"><div class="box-sub" style="color:var(--accent2)">Rendering</div></div>
+    </div>
+
+  </div>
+  </div>
+</div>
+
+<!-- ═══ TWO FRONTENDS ═══ -->
+<div class="grid-2">
+  <div class="card card-green">
+    <h2>Active Frontend — <code>server/web/index.html</code></h2>
+    <table>
+      <tr><th>What</th><th>Detail</th></tr>
+      <tr><td>Framework</td><td>Petite Vue 0.4.1 + UnoCSS runtime (both CDN)</td></tr>
+      <tr><td>Served by</td><td>FastAPI <code>GET /</code> → reads file directly</td></tr>
+      <tr><td>Upload mode</td><td>Single file → stream; multiple → queue</td></tr>
+      <tr><td>Result display</td><td>URL to <code>result/{folder}/final.png</code> (file-system)</td></tr>
+      <tr><td>Queue</td><td>In-memory array, processes one at a time</td></tr>
+      <tr><td>Gallery</td><td>localStorage + server sync every 30 s</td></tr>
+      <tr><td>Dark mode</td><td>CSS class toggle, persisted in localStorage</td></tr>
+      <tr><td>Extra options</td><td>Source language preset, LLM model picker, Enhance small text checkbox</td></tr>
+    </table>
+  </div>
+
+  <div class="card" style="border-left:3px solid var(--muted); opacity:0.8">
+    <h2 style="color:var(--muted)">Dev Frontend — <code>front/</code></h2>
+    <table>
+      <tr><th>What</th><th>Detail</th></tr>
+      <tr><td>Framework</td><td>React 19 + React Router v7 + Tailwind v4</td></tr>
+      <tr><td>Start</td><td><code>npm run dev</code> in <code>front/</code> (port 5173)</td></tr>
+      <tr><td>Proxy</td><td><code>/api/*</code> → <code>localhost:8000</code> (vite.config.ts)</td></tr>
+      <tr><td>Upload mode</td><td>Single → SSE stream; multi → batch endpoint</td></tr>
+      <tr><td>Result display</td><td>In-memory Blob (no server-side file URL)</td></tr>
+      <tr><td>Status</td><td><span class="badge warn">NOT served in prod</span> — not built/mounted by main server</td></tr>
+      <tr><td>Known bug</td><td><code>FinishedImage.result</code> is Blob → JSON-serialization fails; gallery breaks on reload</td></tr>
+      <tr><td>Missing vs index.html</td><td>No Source Language preset, Enhance small text, LLM model picker</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ SERVER ENDPOINTS ═══ -->
+<div class="card card-cyan" style="margin-bottom:1.5rem">
+  <h2>API Endpoints (<code>server/main.py</code>)</h2>
+  <table>
+    <tr><th>Method + Path</th><th>Used by</th><th>Returns</th><th>Notes</th></tr>
+    <tr>
+      <td><code>POST /translate/with-form/image/stream/web</code></td>
+      <td><span class="tag green">active UI</span></td>
+      <td>Binary SSE stream → PNG via file URL</td>
+      <td>Web-optimised: sends 1×1 placeholder blob, then <code>final_ready:{folder}</code> signal; UI then fetches from FS</td>
+    </tr>
+    <tr>
+      <td><code>POST /translate/with-form/image/stream</code></td>
+      <td><span class="tag purple">React dev</span> / scripts</td>
+      <td>Binary SSE stream → full PNG blob</td>
+      <td>General-purpose; returns complete image data inline</td>
+    </tr>
+    <tr>
+      <td><code>POST /translate/batch/json-images</code></td>
+      <td><span class="tag purple">React dev</span></td>
+      <td><code>list[str | null]</code> base64 data URLs</td>
+      <td>All pages OCR'd first, single LLM call for cross-page context; <span class="badge warn">not E2E verified</span></td>
+    </tr>
+    <tr>
+      <td><code>GET /results/list</code></td>
+      <td><span class="tag green">active UI</span></td>
+      <td>JSON list of result folder names</td>
+      <td>Used by gallery sync (every 30 s)</td>
+    </tr>
+    <tr>
+      <td><code>GET /results/download-all</code></td>
+      <td><span class="tag green">active UI</span></td>
+      <td>ZIP of all <code>final.png</code> files</td>
+      <td>Uses <code>original_name.txt</code> per folder for filenames</td>
+    </tr>
+    <tr>
+      <td><code>DELETE /results/clear</code></td>
+      <td><span class="tag green">active UI</span></td>
+      <td>JSON message</td>
+      <td>Deletes all result dirs that contain final.png</td>
+    </tr>
+    <tr>
+      <td><code>DELETE /results/{folder}</code></td>
+      <td><span class="tag green">active UI</span></td>
+      <td>JSON message</td>
+      <td>Deletes a single result folder</td>
+    </tr>
+    <tr>
+      <td><code>POST /register</code></td>
+      <td>Worker subprocess</td>
+      <td>—</td>
+      <td>Worker self-registers; nonce validated via <code>X-Nonce</code> header</td>
+    </tr>
+    <tr>
+      <td><code>GET /</code> &nbsp;<code>GET /manual</code></td>
+      <td>Browser</td>
+      <td>HTML</td>
+      <td>Reads <code>server/web/index.html</code> / <code>server/web/manual.html</code> from disk on every request</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ═══ PIPELINE DETAIL ═══ -->
+<div class="card card-purple" style="margin-bottom:1.5rem">
+  <h2>Translation Pipeline (single image, server/web/index.html path)</h2>
+
+  <div class="pipeline">
+    <div class="step">
+      <div class="step-box" style="border-color:var(--accent);color:var(--accent)">Upload</div>
+      <div class="step-num">1</div>
+      <div class="step-sub">FormData multipart POST; stream opened immediately</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="step">
+      <div class="step-box" style="border-color:var(--accent);color:var(--accent)">Queue / Pending</div>
+      <div class="step-num">2</div>
+      <div class="step-sub">server task_queue; shows position if worker busy</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="step">
+      <div class="step-box" style="border-color:var(--accent2);color:var(--accent2)">Detection</div>
+      <div class="step-num">3</div>
+      <div class="step-sub">DBNet (default); CTD auto-fallback if 0 regions found</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="step">
+      <div class="step-box" style="border-color:var(--accent2);color:var(--accent2)">OCR</div>
+      <div class="step-num">4</div>
+      <div class="step-sub">48px / MangaOCR / PP-OCRv6; per source-lang preset</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="step">
+      <div class="step-box" style="border-color:var(--accent2);color:var(--accent2)">Textline Merge</div>
+      <div class="step-num">5</div>
+      <div class="step-sub">Groups detected text regions into logical lines</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="step">
+      <div class="step-box" style="border-color:var(--accent2);color:var(--accent2)">Mask Gen</div>
+      <div class="step-num">6</div>
+      <div class="step-sub">Text mask for inpainting; dilation offset configurable</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="step">
+      <div class="step-box" style="border-color:var(--accent2);color:var(--accent2)">Inpainting</div>
+      <div class="step-num">7</div>
+      <div class="step-sub">lama_large default; erases original text</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="step">
+      <div class="step-box" style="border-color:var(--yellow);color:var(--yellow)">Upscaling</div>
+      <div class="step-num">8 opt</div>
+      <div class="step-sub">ESR-GAN 2× then revert; "Enhance small text" toggle</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="step">
+      <div class="step-box" style="border-color:var(--orange);color:var(--orange)">Translation</div>
+      <div class="step-num">9</div>
+      <div class="step-sub">custom_openai → LM Studio → Sugoi 14B or 32B</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="step">
+      <div class="step-box" style="border-color:var(--accent2);color:var(--accent2)">Rendering</div>
+      <div class="step-num">10</div>
+      <div class="step-sub">manga2eng renderer; writes final.png + signals final_ready</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="step">
+      <div class="step-box" style="border-color:var(--green);color:var(--green)">Result</div>
+      <div class="step-num">done</div>
+      <div class="step-sub">UI fetches result/{folder}/final.png by URL</div>
+    </div>
+  </div>
+
+  <div class="note" style="margin-top:1rem">
+    <strong>SSE stream format:</strong> binary frames — 1 byte status code + 4 byte big-endian size + N bytes data.
+    Codes: <code>0</code> = result blob, <code>1</code> = status string / special signals (<code>rendering_folder:</code>, <code>final_ready:</code>),
+    <code>2</code> = error, <code>3</code> = queue position, <code>4</code> = queue cleared.
+  </div>
+</div>
+
+<!-- ═══ KEY FILES ═══ -->
+<div class="grid-2">
+  <div class="card card-accent">
+    <h2>Key Source Files</h2>
+    <table>
+      <tr><th>File</th><th>Role</th></tr>
+      <tr><td><code>server/main.py</code></td><td>FastAPI app, all routes, worker spawn + watchdog</td></tr>
+      <tr><td><code>server/core/myqueue.py</code></td><td>Async task queue (one worker slot)</td></tr>
+      <tr><td><code>server/core/instance.py</code></td><td>Worker instance registry; round-robin RPC</td></tr>
+      <tr><td><code>server/api/request_extraction.py</code></td><td><code>get_ctx</code>, <code>get_batch_ctx</code>, streaming helper</td></tr>
+      <tr><td><code>server/api/to_json.py</code></td><td>ctx → TranslationResponse; always reads <code>text_region.translation</code></td></tr>
+      <tr><td><code>manga_translator/manga_translator.py</code></td><td>Pipeline orchestration; <code>_dispatch_with_context</code></td></tr>
+      <tr><td><code>manga_translator/translators/custom_openai.py</code></td><td>LM Studio translator; chunk-carry context fix</td></tr>
+      <tr><td><code>manga_translator/translators/config_gpt.py</code></td><td>Few-shot samples; Thai entry added here</td></tr>
+      <tr><td><code>manga_translator/utils/textblock.py</code></td><td><code>LANGUAGE_ORIENTATION_PRESETS</code>; THA:h added</td></tr>
+      <tr><td><code>manga_translator/ocr/model_ppocr.py</code></td><td>PP-OCRv6 (rapidocr) multi-script OCR</td></tr>
+      <tr><td><code>server/web/index.html</code></td><td>The entire active UI — single file, ~2170 lines</td></tr>
+      <tr><td><code>front/app/App.tsx</code></td><td>React UI root; translation pipeline logic</td></tr>
+      <tr><td><code>start-web-server.bat</code></td><td>Double-click launcher — <code>python main.py --start-instance --host 0.0.0.0 --use-gpu</code></td></tr>
+    </table>
+  </div>
+
+  <div class="card card-yellow">
+    <h2>LM Studio / Model Config</h2>
+    <table>
+      <tr><th>Item</th><th>Detail</th></tr>
+      <tr><td>Endpoint</td><td><code>http://localhost:1234/v1</code> (set in <code>.env</code>)</td></tr>
+      <tr><td>Sugoi 14B</td><td>Q4_K_M · ~9 GB · fully GPU-resident on RTX 3060 12 GB</td></tr>
+      <tr><td>Sugoi 32B</td><td>Q4_K_M · ~20 GB · partial VRAM offload → slower</td></tr>
+      <tr><td>Model switch</td><td>Per-request via <code>translator.custom_openai_model</code> field; LM Studio auto-loads on first use</td></tr>
+      <tr><td>Context carry</td><td>Last chunk's Q→A pairs forwarded to next chunk (batch mode)</td></tr>
+      <tr><td>Cross-page ctx</td><td><code>--context-size 3</code> (last 3 pages' translated lines sent as reference)</td></tr>
+    </table>
+
+    <h2 style="margin-top:1.25rem">Hardware</h2>
+    <table>
+      <tr><td>GPU</td><td>RTX 3060 12 GB VRAM</td></tr>
+      <tr><td>RAM</td><td>32 GB (VM; expandable)</td></tr>
+      <tr><td>Start flag</td><td><code>--use-gpu</code> passed to worker</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ KNOWN ISSUES ═══ -->
+<div class="card card-red" style="margin-bottom:1.5rem">
+  <h2>Known Issues &amp; Technical Debt</h2>
+  <table>
+    <tr><th>Area</th><th>Issue</th><th>Status</th></tr>
+    <tr>
+      <td>React frontend</td>
+      <td><code>FinishedImage.result</code> is a <code>Blob</code> → <code>JSON.stringify</code> → <code>{}</code>; gallery crashes on page reload</td>
+      <td><span class="tag red">bug</span></td>
+    </tr>
+    <tr>
+      <td>React frontend</td>
+      <td><code>URL.createObjectURL()</code> called inline in JSX render — never revoked → memory leak per render</td>
+      <td><span class="tag red">bug</span></td>
+    </tr>
+    <tr>
+      <td>React frontend</td>
+      <td>Missing <code>colorizer</code> in <code>TranslationSettings</code> object inside <code>processStatusUpdate</code> case 0</td>
+      <td><span class="tag red">bug</span></td>
+    </tr>
+    <tr>
+      <td>React frontend</td>
+      <td>Debug <code>console.log</code> left in <code>ImageHandlingArea.tsx:34</code></td>
+      <td><span class="tag yellow">cleanup</span></td>
+    </tr>
+    <tr>
+      <td>React frontend</td>
+      <td>Not served in production — needs build step + server mounting</td>
+      <td><span class="tag yellow">gap</span></td>
+    </tr>
+    <tr>
+      <td>server/web/index.html</td>
+      <td>Many <code>console.log</code> calls scattered through translation pipeline (debug artifacts)</td>
+      <td><span class="tag yellow">cleanup</span></td>
+    </tr>
+    <tr>
+      <td>server/web/index.html</td>
+      <td>"Mark as finished" button visible in queue (testing artifact, should be removed)</td>
+      <td><span class="tag yellow">cleanup</span></td>
+    </tr>
+    <tr>
+      <td>server/web/index.html</td>
+      <td>Gallery sync makes N+1 HEAD requests per new folder on every 30 s poll</td>
+      <td><span class="tag yellow">perf</span></td>
+    </tr>
+    <tr>
+      <td>server/web/index.html</td>
+      <td>Queue thumbnail <code>URL.createObjectURL(queuedImage.file)</code> in template — never revoked</td>
+      <td><span class="tag red">bug</span></td>
+    </tr>
+    <tr>
+      <td>server/web/index.html</td>
+      <td>Title still reads "Image/Manga Translator" — should be "panelglot"</td>
+      <td><span class="tag yellow">branding</span></td>
+    </tr>
+    <tr>
+      <td>server/web/index.html</td>
+      <td>Footer links (Ko-fi, Patreon, GitHub) point to original upstream project</td>
+      <td><span class="tag yellow">branding</span></td>
+    </tr>
+    <tr>
+      <td>server/web/index.html</td>
+      <td>Gallery thumbnail uses <code>aspect-square + object-cover</code> — crops portrait manga pages</td>
+      <td><span class="tag yellow">ux</span></td>
+    </tr>
+    <tr>
+      <td>server/web/index.html</td>
+      <td>No individual download button in gallery modal</td>
+      <td><span class="tag yellow">ux</span></td>
+    </tr>
+    <tr>
+      <td>Pipeline</td>
+      <td><code>IND, SRP, CNR, HRV</code> missing from <code>LANGUAGE_ORIENTATION_PRESETS</code> → vertical layout bug for those targets</td>
+      <td><span class="tag red">bug</span></td>
+    </tr>
+    <tr>
+      <td>Batch mode (React)</td>
+      <td>Not verified end-to-end (per HANDOFF.md)</td>
+      <td><span class="tag yellow">unverified</span></td>
+    </tr>
+    <tr>
+      <td>Worker watchdog</td>
+      <td>Max 5 auto-restarts; after that, hanging requests need manual server restart</td>
+      <td><span class="tag">accepted</span></td>
+    </tr>
+    <tr>
+      <td>Detection</td>
+      <td>CTD cannot be pushed past 1024 px native resolution (tested — degrades OCR)</td>
+      <td><span class="tag">accepted</span></td>
+    </tr>
+  </table>
+</div>
+
+<!-- ═══ SETTINGS / DEFAULTS ═══ -->
+<div class="grid-3">
+  <div class="card card-green">
+    <h2>Default Settings</h2>
+    <table>
+      <tr><th>Setting</th><th>Default</th></tr>
+      <tr><td>Detector</td><td>default (DBNet)</td></tr>
+      <tr><td>Detection size</td><td>2560 px</td></tr>
+      <tr><td>Box threshold</td><td>0.2</td></tr>
+      <tr><td>Unclip ratio</td><td>2.3</td></tr>
+      <tr><td>Mask dilation</td><td>30</td></tr>
+      <tr><td>OCR</td><td>48px (auto-set by source lang)</td></tr>
+      <tr><td>Inpainter</td><td>lama_large</td></tr>
+      <tr><td>Inpainting size</td><td>2048 px</td></tr>
+      <tr><td>Translator</td><td>custom_openai (LM Studio)</td></tr>
+      <tr><td>LLM model</td><td>sugoi-14b-ultra</td></tr>
+      <tr><td>Target language</td><td>ENG</td></tr>
+      <tr><td>Renderer</td><td>manga2eng</td></tr>
+      <tr><td>Enhance small text</td><td>ON (upscale_ratio: 2)</td></tr>
+      <tr><td>Context size</td><td>3 pages</td></tr>
+      <tr><td>no_text_lang_skip</td><td>true</td></tr>
+    </table>
+  </div>
+
+  <div class="card card-orange">
+    <h2>Source Language Presets</h2>
+    <table>
+      <tr><th>Source</th><th>OCR model</th><th>Auto-rotate</th></tr>
+      <tr><td>Auto</td><td>48px</td><td>No</td></tr>
+      <tr><td>Japanese</td><td>MangaOCR (mocr)</td><td>Yes</td></tr>
+      <tr><td>Chinese</td><td>48px</td><td>No</td></tr>
+      <tr><td>Korean</td><td>48px</td><td>No</td></tr>
+      <tr><td>English</td><td>48px</td><td>No</td></tr>
+      <tr><td>Multi-script</td><td>PP-OCRv6 (ppocr)</td><td>No</td></tr>
+    </table>
+    <div class="note" style="margin-top:0.75rem">PP-OCRv6 reads mixed EN/CN/JP/KR in one pass (via rapidocr). Slower on CPU; useful when source has mixed scripts.</div>
+  </div>
+
+  <div class="card card-purple">
+    <h2>Settings Persistence</h2>
+    <table>
+      <tr><th>Key</th><th>What</th></tr>
+      <tr><td><code>manga-translator-settings</code></td><td>All option values + <code>__version:3</code></td></tr>
+      <tr><td><code>manga-translator-finished-images</code></td><td>Gallery (last 20 items; URLs to server files)</td></tr>
+      <tr><td><code>manga-translator-dark-mode</code></td><td>Boolean string</td></tr>
+    </table>
+    <div class="note" style="margin-top:0.75rem">Version 3 check: if saved settings have a different <code>__version</code>, they are discarded entirely so new defaults take effect. Bump <code>__version</code> whenever defaults change.</div>
+  </div>
+</div>
+
+<!-- ═══ HOW TO RUN ═══ -->
+<div class="card card-cyan" style="margin-bottom:1.5rem">
+  <h2>How to Run</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem">
+    <div>
+      <h3>Normal (production)</h3>
+      <ul>
+        <li>Double-click <code>start-web-server.bat</code> in repo root</li>
+        <li>Ensure LM Studio is running (Server tab, port 1234)</li>
+        <li>Open <code>http://localhost:8000</code></li>
+        <li>Closing the console stops the server</li>
+      </ul>
+      <div class="note" style="margin-top:0.5rem">Never run the server as a tracked background task inside an assistant session — it will be killed on session end. Use <code>Start-Process</code> or the .bat file only.</div>
+    </div>
+    <div>
+      <h3>Manual start (equivalent to .bat)</h3>
+      <ul>
+        <li><code>cd server</code></li>
+        <li><code>..\venv\Scripts\python.exe main.py --start-instance --host 0.0.0.0 --use-gpu</code></li>
+      </ul>
+      <h3 style="margin-top:0.75rem">React dev frontend</h3>
+      <ul>
+        <li><code>cd front &amp;&amp; npm run dev</code></li>
+        <li>Opens at port 5173; proxies <code>/api/*</code> → <code>localhost:8000</code></li>
+        <li>Main server must be running separately</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

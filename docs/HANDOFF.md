@@ -212,3 +212,93 @@ then, the server has been run via `Start-Process` (PowerShell) or the new
 `.bat` file — a genuine standalone OS process, not tied to any assistant
 session. Keep doing that; don't go back to launching it as a tracked
 background task for anything long-lived.
+
+## Repo reorg + translator backend cleanup (2026-08-29)
+
+**Folder reorganization** — the repo root, `server/`, and the
+`manga_translator/` package were tidied. Full rationale/verification is in
+the session's plan; summary of what moved:
+
+- Root docs → `docs/` (`CHANGELOG*.md`, `HANDOFF.md` — this file,
+  `UPSTREAM_README*.md`, `system-overview.html`). `README.md` stays at
+  root (GitHub convention; `devscripts/make_readme.py` writes to it by
+  relative path).
+- Root launcher scripts → `scripts/` (`run.bat`, `run.sh`,
+  `run_as_colab.ipynb`, `run-as-kaggle.ipynb`, `start-web-server.bat`,
+  `docker_prepare.py`). **`start-web-server.bat` now lives at
+  `scripts/start-web-server.bat`** — update any shortcuts/muscle memory.
+- `requirements-dev.txt` / `-rocm.txt` / `-xpu.txt` → `requirements/`.
+  `requirements.txt` stays at root (Dockerfile/CI expect it there).
+- `server/` split from a flat file list into `server/core/` (queue,
+  executor registry, streaming protocol, internal RPC wire format),
+  `server/api/` (request→context→response translation layer), and
+  `server/web/` (`index.html`, `manual.html`). `server/main.py` and
+  `server/args.py` stay at `server/` root.
+- `manga_translator/manga_translator.py` (the orchestrator) renamed to
+  `manga_translator/pipeline.py` — it shared its name with the package
+  itself, which was confusing. `manga_translator/utils/generic2.py`
+  renamed to `manga_translator/utils/text_utils.py` for the same reason.
+- **Deliberately left alone**: `manga_translator/`'s domain subpackages
+  (detection/, ocr/, inpainting/, translators/, rendering/, etc.) were
+  already sensibly organized — restructuring them further would touch
+  dozens of relative-import sites for no real benefit. `config.py` /
+  `args.py` / `save.py` stay at the package root for the same reason.
+  `dict/`, `fonts/`, `examples/`, `server/` (as a top-level dir) all stay
+  at repo root — Docker, the Makefile's dev bind-mounts, and
+  `BASE_PATH = dirname(dirname(__file__))` in
+  `manga_translator/utils/generic.py` all assume that layout.
+- Every moved file's call sites were updated (imports, Dockerfile,
+  Makefile mount paths, CI `paths:` triggers, doc links) and verified via
+  a static AST-based import audit across the whole repo (no venv was
+  available in the sandbox this was done in, so `pytest`/`python -c
+  "import manga_translator"` could not be run live — do that as a
+  first check next session).
+
+**Translator backend cleanup** — panelglot is LM Studio-only now (see
+"LLM setup" above), so all translator backends except `custom_openai` were
+deleted from `manga_translator/translators/`: `baidu`, `caiyun`, `chatgpt`
+(+`chatgpt_2stage`), `common_gpt` (only used by the two deleted GPT
+backends), `deepl`, `deepseek`, `gemini` (+`gemini_2stage`), `google`
+(+`google_gtoken`), `groq`, `m2m100` (+`m2m100_hf`), `mbart50`, `nllb`,
+`papago`, `qwen2`, `sakura`, `selective` (the "auto-pick best offline
+translator" wrapper — meaningless once every offline backend it wrapped
+was removed), `sugoi` (the old dedicated NMT model wrapper — **not** the
+same thing as "Sugoi" the LLM model name loaded via LM Studio and selected
+through `customOpenaiModel` in the web UI, which is untouched), `youdao`,
+and the now-orphaned `tokenizers/` folder. Kept: `custom_openai.py`,
+`none.py`, `original.py` (no-op utility translators the pipeline needs
+regardless of backend), plus their shared infra (`common.py`,
+`config_gpt.py`, `keys.py` — trimmed to only the `CUSTOM_OPENAI_*` env
+vars `custom_openai.py` actually uses).
+
+Follow-on edits this required: `manga_translator/config.py`'s `Translator`
+enum trimmed to `none`/`original`/`custom_openai`, its default changed
+from `Translator.sugoi` → `Translator.custom_openai`, and the `'gpt'*'`/`'openai'`
+alias in `_missing_` now resolves to `custom_openai` instead of the
+deleted `chatgpt`. `manga_translator/pipeline.py`'s two translation-dispatch
+functions had their `chatgpt`/`chatgpt_2stage`-specific branches removed,
+keeping only the `custom_openai` context-injection path (streaming/
+per-page mode) and the generic `dispatch_translation` fallback (batch
+mode — still not `custom_openai`-context-aware in batch, per the existing
+note above; unchanged by this cleanup). `server/web/index.html`'s
+`validTranslators` list trimmed to match. `test/test_translation.py`
+rewritten around the surviving three translators. `examples/Example.env`,
+`examples/translator_chain_example.json`, `examples/gpt_config-example.yaml`
+updated to stop referencing deleted backends.
+
+**Not done / explicitly out of scope this session**: rewriting the API
+server (`server/`) from Python to TypeScript — mentioned as a future
+direction, not started. Trimming OCR backends (`manga_translator/ocr/`) —
+no evidence yet of which ones "work" vs. don't; needs empirical testing
+before cutting anything there.
+
+**`demo/` removed** — the `demo/doc/` Docker Compose variants
+(local-dev/web-cpu/web-gpu) were deleted per user request. The
+`Makefile`'s `run-web-server` target used a `/demo/doc/../../...` path
+trick to bind-mount `result/`, `server/main.py`, and
+`server/core/instance.py` — rewritten to plain relative paths
+(`./result`, `./server/main.py`, `./server/core/instance.py`) now that
+the `demo/doc` anchor is gone. `docs/UPSTREAM_README*.md` still reference
+`demo/doc/*.yml` — left as-is since those files are preserved,
+unmodified copies of the *upstream* project's own docs (per the note at
+the top of `README.md`), not this fork's active documentation.
