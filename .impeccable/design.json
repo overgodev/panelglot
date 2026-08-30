@@ -18,7 +18,8 @@
       "survey-orange-soft": { "role": "primary", "displayName": "Survey Orange Soft", "canonical": "rgba(246, 130, 31, 0.14)" },
       "alert-red": { "role": "danger", "displayName": "Alert Red", "canonical": "#e5484d" },
       "alert-red-soft": { "role": "danger", "displayName": "Alert Red Soft", "canonical": "rgba(229, 72, 77, 0.14)" },
-      "confirm-green": { "role": "success", "displayName": "Confirm Green", "canonical": "#3dd68c" }
+      "confirm-green": { "role": "success", "displayName": "Confirm Green", "canonical": "#3dd68c" },
+      "ink-on-accent": { "role": "neutral", "displayName": "Ink On Accent", "canonical": "#17110a" }
     },
     "typographyMeta": {
       "display": { "displayName": "Chakra Petch", "purpose": "Wordmark, dialog titles - angular technical face, HUD character." },

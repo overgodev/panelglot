@@ -74,7 +74,7 @@ body {
 
 ::selection {
   background: var(--color-accent);
-  color: #16110a;
+  color: #17110a;
 }
 
 :focus-visible {

@@ -17,6 +17,7 @@ colors:
   alert-red: "#e5484d"
   alert-red-soft: "rgba(229, 72, 77, 0.14)"
   confirm-green: "#3dd68c"
+  ink-on-accent: "#17110a"
 typography:
   display:
     fontFamily: "Chakra Petch, ui-sans-serif, system-ui, sans-serif"
@@ -31,6 +32,7 @@ rounded:
   sm: "4px"
   md: "7px"
   lg: "11px"
+  full: "999px"
 components:
   button-primary:
     backgroundColor: "{colors.survey-orange}"
@@ -109,6 +111,10 @@ hue, reserved for signal.
 - **Alert Red** (`#e5484d`) / **Alert Red Soft** (`rgba(229,72,77,0.14)`): errors only.
 - **Confirm Green** (`#3dd68c`): success/verified states only (a saved endpoint that has
   actually worked, a finished translation).
+- **Ink On Accent** (`#17110a`): the near-black text/icon color used on top of Survey
+  Orange fills — primary buttons, status badges, text selection. Never plain black or
+  white; this is a warm near-black that reads as "ink on the accent," not "default text
+  color inverted."
 
 ### Named Rules
 **The One Signal Rule.** Survey Orange is the only saturated color in the system. If
@@ -185,8 +191,11 @@ A shadow on ordinary chrome would compete with that signal.
 
 Small, consistent corner radii throughout: 4px (`sm`, form fields/inputs), 7px (`md`, most
 buttons and interactive chrome), 11px (`lg`, larger containers — currently declared,
-lightly used). Radii never scale up for "important" elements; importance is carried by
-color and weight, not by rounding more aggressively. Borders are hairline (1–1.5px) and
+lightly used), and 999px (`full`, the one exception — status badges, circular buttons,
+scrollbar thumbs, anything meant to read as a dot/pill rather than a rectangle). Radii
+never scale up for "important" elements; importance is carried by color and weight, not by
+rounding more aggressively, and `full` is reserved for genuinely circular/pill shapes, not
+used as a bigger version of `lg`. Borders are hairline (1–1.5px) and
 low-contrast at rest, brightening to `hairline-strong` or the accent on hover/focus rather
 than thickening.
 
