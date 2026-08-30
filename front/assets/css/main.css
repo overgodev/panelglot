@@ -2,7 +2,82 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url("https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap");
+
+:root {
+  --color-background: #0a0a0c;
+  --color-surface: #16161a;
+  --color-surface-raised: #1e1e24;
+  --color-surface-sunken: #0d0d0f;
+  --color-border: #2a2a32;
+  --color-border-strong: #3a3a44;
+
+  --color-text: #eceef2;
+  --color-text-secondary: hsl(28 10% 62%);
+  --color-text-tertiary: hsl(28 8% 42%);
+
+  --color-accent: #f6821f;
+  --color-accent-strong: #ff9843;
+  --color-accent-soft: rgba(246, 130, 31, 0.14);
+  --color-danger: #e5484d;
+  --color-danger-soft: rgba(229, 72, 77, 0.14);
+  --color-success: #3dd68c;
+
+  --font-display: "Chakra Petch", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 11px;
+
+  --shadow-panel: 0 10px 28px -10px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 16px 40px -12px rgba(0, 0, 0, 0.65), 0 4px 12px rgba(0, 0, 0, 0.45);
+}
+
 html,
 body {
-  @apply bg-gray-100;
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-body);
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+#__nuxt {
+  height: 100%;
+}
+
+* {
+  scrollbar-color: var(--color-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-border-strong);
+  border-radius: 999px;
+  border: 2px solid var(--color-surface);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-text-tertiary);
+}
+
+::selection {
+  background: var(--color-accent);
+  color: #16110a;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }

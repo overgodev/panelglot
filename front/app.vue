@@ -1,3 +1,4 @@
 <template>
+  <TopoBackground />
   <NuxtPage />
 </template>

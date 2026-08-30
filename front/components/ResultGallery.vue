@@ -73,95 +73,101 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleKeyDown));
 </script>
 
 <template>
-  <div v-if="finishedImages.length === 0" class="text-center py-12 text-gray-500">
-    <div class="text-4xl mb-4">🖼️</div>
-    <p>No finished translations yet</p>
-    <p class="text-sm">Completed translations will appear here</p>
+  <div v-if="finishedImages.length === 0" class="text-center py-6 text-sm" style="color: var(--color-text-tertiary)">
+    <Icon name="image" :size="22" class="mx-auto mb-2" style="color: var(--color-text-tertiary)" />
+    No finished translations yet
   </div>
 
   <template v-else>
-    <div class="flex items-center justify-between mb-6">
-      <h3 class="text-lg font-semibold text-gray-800">
-        Translation Results ({{ finishedImages.length }})
-      </h3>
+    <div class="flex items-center justify-between">
+      <span class="text-[11px]" style="color: var(--color-text-tertiary)">{{ finishedImages.length }} saved</span>
       <button
         @click="emit('clear-gallery')"
-        class="px-3 py-1 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
+        class="text-[11px] font-medium transition-colors"
+        style="color: var(--color-danger)"
       >
         Clear All
       </button>
     </div>
 
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+    <div class="grid grid-cols-3 gap-2 mt-2">
       <div
         v-for="image in finishedImages"
         :key="image.id"
-        class="group cursor-pointer bg-white rounded-lg border hover:border-blue-400 hover:shadow-md transition-all duration-200"
+        class="group cursor-pointer rounded-sm border overflow-hidden transition-colors"
+        style="border-color: var(--color-border)"
         @click="openImageModal(image)"
       >
-        <div class="relative aspect-square overflow-hidden rounded-t-lg">
+        <div class="relative aspect-square overflow-hidden">
           <img
             :src="urlFor(image)"
             :alt="`Translated: ${image.originalName}`"
             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
           />
         </div>
-        <div class="p-2">
-          <div class="text-xs text-gray-600 truncate" :title="image.originalName">
-            {{ image.originalName }}
-          </div>
-          <div class="text-xs text-gray-400">
-            {{ new Date(image.finishedAt).toLocaleDateString() }}
-          </div>
-        </div>
       </div>
     </div>
 
     <div
       v-if="isModalOpen && selectedImage"
-      class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
+      class="fixed inset-0 flex items-center justify-center z-50"
+      style="background: rgba(10, 10, 12, 0.85)"
       @click="closeImageModal"
     >
       <div class="relative max-w-[90vw] max-h-[90vh]" @click.stop>
         <button
           @click="navigateImage('prev')"
-          class="absolute left-4 top-1/2 -translate-y-1/2 bg-black bg-opacity-50 text-white p-2 rounded-full hover:bg-opacity-75 transition-all z-10"
+          class="modal-btn absolute left-4 top-1/2 -translate-y-1/2"
         >
-          ‹
+          <Icon name="chevron-down" :size="16" class="rotate-90" />
         </button>
 
         <button
           @click="navigateImage('next')"
-          class="absolute right-4 top-1/2 -translate-y-1/2 bg-black bg-opacity-50 text-white p-2 rounded-full hover:bg-opacity-75 transition-all z-10"
+          class="modal-btn absolute right-4 top-1/2 -translate-y-1/2"
         >
-          ›
+          <Icon name="chevron-down" :size="16" class="-rotate-90" />
         </button>
 
-        <button
-          @click="closeImageModal"
-          class="absolute top-4 right-4 bg-black bg-opacity-50 text-white p-2 rounded-full hover:bg-opacity-75 transition-all z-10"
-        >
-          ✕
+        <button @click="closeImageModal" class="modal-btn absolute top-4 right-4">
+          <Icon name="close" :size="16" />
         </button>
 
         <img
           :src="urlFor(selectedImage)"
           :alt="`Translated: ${selectedImage.originalName}`"
-          class="max-w-full max-h-full object-contain"
+          class="max-w-full max-h-full object-contain rounded-sm"
         />
 
-        <div class="absolute bottom-4 left-4 right-4 bg-black bg-opacity-50 text-white p-3 rounded-lg">
+        <div class="absolute bottom-4 left-4 right-4 p-3 rounded-md" style="background: rgba(10, 10, 12, 0.75); color: var(--color-text)">
           <div class="text-sm font-medium">{{ selectedImage.originalName }}</div>
-          <div class="text-xs text-gray-300">
+          <div class="text-xs" style="color: var(--color-text-tertiary)">
             Completed: {{ new Date(selectedImage.finishedAt).toLocaleString() }}
           </div>
-          <div class="text-xs text-gray-300">Translator: {{ selectedImage.settings.translator }}</div>
-        </div>
-
-        <div class="absolute bottom-20 left-1/2 -translate-x-1/2 bg-black bg-opacity-50 text-white px-3 py-1 rounded-full text-xs">
-          Use ← → arrow keys or click arrows to navigate
+          <div class="text-xs" style="color: var(--color-text-tertiary)">
+            Translator: {{ selectedImage.settings.translator }}
+          </div>
         </div>
       </div>
     </div>
   </template>
 </template>
+
+<style scoped>
+.modal-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: rgba(10, 10, 12, 0.6);
+  color: var(--color-text);
+  z-index: 10;
+  transition: background-color 120ms ease;
+}
+
+.modal-btn:hover {
+  background: rgba(10, 10, 12, 0.85);
+}
+</style>
