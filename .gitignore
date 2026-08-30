@@ -52,3 +52,6 @@ MANIFEST
 cert.pem
 key.pem
 *.log
+
+# Impeccable design-hook local cache (transient, machine-specific)
+.impeccable/hook.cache.json

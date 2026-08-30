@@ -489,6 +489,87 @@ and `with-form` variants, and the three batch endpoints) with a real
 image, and confirm the queue-position/progress-report chunks (status
 1/3/4) still arrive during streaming.
 
+## `front/` CSP-style redesign — status (updated 2026-08-30)
+
+The `front/` UI (dark, Clip Studio Paint-style shell — top bar, left tool
+rail, canvas viewport, right dock, filmstrip) was built out this session
+into a working app. `DESIGN.md` (repo root) plus its sidecar
+`.impeccable/design.json` now document the visual system (palette,
+typography, component conventions) as the canonical reference — read that
+before styling anything new here rather than re-deriving tokens from
+`front/assets/css/main.css` by hand.
+
+**Done and wired end-to-end (not yet exercised against a live LM Studio/
+Ollama + GPU run — no such environment was available this session, only
+syntax/type-level checks and live UI testing against a 502 from the
+backend not being up):**
+
+- **Highlight-to-retranslate, as a manual text-box tool.** The lasso tool
+  (`ToolRail.vue`) is now live: drag a box on the canvas
+  (`CanvasViewport.vue`, SVG overlay + `getScreenCTM()`-based coordinate
+  mapping so it stays correct at any zoom/pan) to mark text the detector
+  missed (stylized SFX, floating "screaming" text, etc.). Boxes are stored
+  per-page (`front/pages/index.vue` `manualBoxes: Map<pageId, ManualBox[]>`)
+  and sent as `detector.manual_text_boxes` (`[x1,y1,x2,y2,x3,y3,x4,y4]` in
+  original pre-upscale pixel coords) in the translate request.
+  Backend: `DetectorConfig.manual_text_boxes` (`manga_translator/config.py`)
+  → `MangaTranslator._inject_manual_text_boxes()` (`pipeline.py`, called
+  from both `_translate` and `translate_batch`) appends them as
+  prob-1.0 `Quadrilateral`s and burns them into `ctx.mask`/`ctx.mask_raw`
+  so they get inpainted and retranslated like any detected region. Click an
+  existing box (lasso tool active) to remove it.
+- **Two-button pipeline: Preview OCR vs Translate All.** "Preview OCR"
+  (`AppHeader.vue`) runs detection+OCR only (no translation/inpainting/
+  render) and overlays recognized text regions on the canvas (green boxes,
+  hover for the raw OCR text) so you can sanity-check catch before
+  committing to a full translate. Backend: `Config.ocr_preview_only`
+  short-circuits `_translate()` right after textline-merge;
+  `manga_translator/mode/response.py::to_ocr_preview()` serializes
+  `ctx.text_regions` (bbox + raw text, scaled back to original image
+  coords) without needing `ctx.img_inpainted`; new route
+  `POST /translate/with-form/ocr-preview` (`server/main.py`) always forces
+  `ocr_preview_only=True` server-side regardless of what the client sends.
+- **Per-page settings, not one config for the whole story.** `RightDock.vue`
+  has a "Custom settings for `<page>`" toggle; when on, every field edit
+  writes to that page's override instead of the shared defaults
+  (`front/pages/index.vue`'s `fieldProxy()` / `pageOverrides` map). This
+  required a real backend change: the batch endpoint
+  (`/translate/batch/*`) used to take exactly one shared `Config` for every
+  image. `BatchTranslateRequest.configs: list[Config] | None` (falls back
+  to the old shared `config` field if omitted — `resolved_configs()` in
+  `server/api/request_extraction.py`) now threads one config per image all
+  the way through `BatchQueueElement` → `ExecutorInstance.sent_batch*` →
+  the worker's `translate_batch` body parsing
+  (`manga_translator/mode/share.py`) → `MangaTranslator.translate_batch()`,
+  which already looped per-`(image, config)` pair internally — the gap was
+  entirely in the API layer, not the pipeline.
+- **OCR model + text detector pickers exposed in the UI**, each option
+  labeled with which language it's best for (was previously only
+  configurable via the CLI/API — see the "Text detector and OCR model
+  pickers" bullet below, from earlier this session).
+- **Stories** (save/reopen a project) and the **saved custom-endpoint
+  picker** (test/warm-up/unload for LM Studio and headless Ollama) — see
+  the "New frontend: `front/`" section in `README.md` for the full
+  rundown; both landed earlier this session and are unaffected by the
+  above.
+
+**Still not wired — Story Context isn't sent to the LLM.** `RightDock.vue`'s
+"Story Context" section (project name + character/glossary notes) still
+only persists to `localStorage`
+(`front/utils/localStorage.ts` `loadStoryContext`/`saveStoryContext`) — not
+included in `buildTranslationConfigObjectFor()` and the backend `Config`
+schema has no field for it. Intent unchanged from before: thread it into
+the LLM prompt the same way cross-page context already does (see
+"Cross-page translation context" above) — likely belongs alongside the
+existing `context_size`/`prev_context` mechanism in
+`manga_translator/translators/custom_openai.py`. The UI still honestly
+labels it as not-yet-live rather than pretending.
+
+**Colorization model selection** is also still just the one real option
+(`mc2`) — unchanged, still needs backend support for additional colorizer
+backends (`manga_translator/colorization/`) before the dropdown has
+anything more to offer.
+
 ## Plan: rewrite `server/` (API orchestration layer) from Python to TypeScript — remaining steps
 
 Step 1 above ("Land the pickle-removal change") is done. Steps 2–4 (stand

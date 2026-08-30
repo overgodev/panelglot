@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-30T09:15:00.000Z",
+  "title": "Design System: Panelglot",
+  "extensions": {
+    "colorMeta": {
+      "void-black": { "role": "neutral", "displayName": "Void Black", "canonical": "#0a0a0c" },
+      "panel-charcoal": { "role": "neutral", "displayName": "Panel Charcoal", "canonical": "#16161a" },
+      "panel-raised": { "role": "neutral", "displayName": "Panel Raised", "canonical": "#1e1e24" },
+      "panel-sunken": { "role": "neutral", "displayName": "Panel Sunken", "canonical": "#0d0d0f" },
+      "hairline": { "role": "neutral", "displayName": "Hairline", "canonical": "#2a2a32" },
+      "hairline-strong": { "role": "neutral", "displayName": "Hairline Strong", "canonical": "#3a3a44" },
+      "signal-white": { "role": "neutral", "displayName": "Signal White", "canonical": "#eceef2" },
+      "ash-secondary": { "role": "neutral", "displayName": "Ash Secondary", "canonical": "hsl(28 10% 62%)" },
+      "ash-tertiary": { "role": "neutral", "displayName": "Ash Tertiary", "canonical": "hsl(28 8% 42%)" },
+      "survey-orange": { "role": "primary", "displayName": "Survey Orange", "canonical": "#f6821f" },
+      "survey-orange-strong": { "role": "primary", "displayName": "Survey Orange Strong", "canonical": "#ff9843" },
+      "survey-orange-soft": { "role": "primary", "displayName": "Survey Orange Soft", "canonical": "rgba(246, 130, 31, 0.14)" },
+      "alert-red": { "role": "danger", "displayName": "Alert Red", "canonical": "#e5484d" },
+      "alert-red-soft": { "role": "danger", "displayName": "Alert Red Soft", "canonical": "rgba(229, 72, 77, 0.14)" },
+      "confirm-green": { "role": "success", "displayName": "Confirm Green", "canonical": "#3dd68c" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Chakra Petch", "purpose": "Wordmark, dialog titles - angular technical face, HUD character." },
+      "body": { "displayName": "IBM Plex Sans", "purpose": "Field labels, buttons, general UI text." },
+      "label": { "displayName": "IBM Plex Mono", "purpose": "Numeric/data values - zoom %, thresholds, URLs, model names." }
+    },
+    "shadows": [
+      { "name": "panel", "value": "0 10px 28px -10px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.4)", "purpose": "Reserved for chrome that could visually float; sparingly used." },
+      { "name": "pop", "value": "0 16px 40px -12px rgba(0,0,0,0.65), 0 4px 12px rgba(0,0,0,0.45)", "purpose": "The loaded canvas image and modal/popover surfaces." }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "120ms ease", "purpose": "Default transition for background-color/border-color/color state changes across buttons, fields, tool icons." }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main call-to-action (Translate All, Save Story). Near-black text on the accent fill.",
+      "html": "<button class=\"ds-btn-primary\">Translate All</button>",
+      "css": ".ds-btn-primary { background: #f6821f; color: #17110a; padding: 6px 14px; font-size: 13px; font-weight: 600; border-radius: 7px; border: none; transition: background-color 120ms ease; } .ds-btn-primary:hover { background: #ff9843; } .ds-btn-primary:focus-visible { outline: 2px solid #f6821f; outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Secondary actions (Upload, Export, Clear, Preview OCR). Transparent with a hairline border.",
+      "html": "<button class=\"ds-btn-ghost\">Upload</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: hsl(28 10% 62%); border: 1px solid #2a2a32; padding: 6px 11px; font-size: 13px; font-weight: 500; border-radius: 7px; transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease; } .ds-btn-ghost:hover { color: #eceef2; border-color: #3a3a44; background: #1e1e24; }"
+    },
+    {
+      "name": "Tool Rail Icon Button",
+      "kind": "button",
+      "refersTo": "tool-btn",
+      "description": "36x36 icon-only button in the left tool rail. Active state is a tinted fill, not an outline.",
+      "html": "<button class=\"ds-tool-btn ds-tool-btn--active\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 3v17l4.5-4 2.5 5.5 2.4-1.1L12 15h5.5L5 3Z\"/></svg></button>",
+      "css": ".ds-tool-btn { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 7px; color: hsl(28 10% 62%); background: transparent; transition: background-color 120ms ease, color 120ms ease; } .ds-tool-btn:hover { background: #1e1e24; color: #eceef2; } .ds-tool-btn--active { background: rgba(246, 130, 31, 0.14); color: #ff9843; }"
+    },
+    {
+      "name": "Field Select",
+      "kind": "input",
+      "refersTo": "field-input",
+      "description": "Standard dropdown used throughout the right dock. Recessed (sunken) fill distinguishes it as editable.",
+      "html": "<div class=\"ds-field\"><label class=\"ds-field-label\">Text Detector</label><select class=\"ds-field-input\"><option>Default (DBNet)</option></select></div>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 4px; } .ds-field-label { font-size: 12px; font-weight: 500; color: hsl(28 10% 62%); } .ds-field-input { width: 100%; appearance: none; border-radius: 4px; border: 1px solid #2a2a32; background: #0d0d0f; color: #eceef2; padding: 6px 10px; font-size: 13px; transition: border-color 120ms ease; } .ds-field-input:focus { border-color: #f6821f; outline: none; }"
+    },
+    {
+      "name": "Collapsible Section",
+      "kind": "custom",
+      "refersTo": "dock-section",
+      "description": "Native <details>/<summary> settings group used in the right dock (Translation, Detection, Inpainting, ...). Hand-drawn chevron, no icon glyph.",
+      "html": "<details class=\"ds-section\" open><summary class=\"ds-section-summary\">Detection</summary><div class=\"ds-section-body\">...</div></details>",
+      "css": ".ds-section { border-bottom: 1px solid #2a2a32; } .ds-section-summary { display: flex; align-items: center; gap: 6px; padding: 11px 14px; font-size: 12px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: hsl(28 10% 62%); cursor: pointer; list-style: none; } .ds-section-summary::-webkit-details-marker { display: none; } .ds-section-summary::before { content: ''; width: 8px; height: 8px; border-right: 1.5px solid hsl(28 8% 42%); border-bottom: 1.5px solid hsl(28 8% 42%); transform: rotate(-45deg); transition: transform 140ms ease; } .ds-section[open] > .ds-section-summary::before { transform: rotate(45deg); } .ds-section-body { padding: 4px 14px 16px; display: flex; flex-direction: column; gap: 12px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Survey Map HUD",
+    "overview": "Panelglot reads like a field-survey instrument, not a consumer web app: a near-black workspace with orange topographic contour lines drifting behind every panel, as if the canvas were a terrain map the tool is scanning for text. The aesthetic exists because the product's job is literally detection and mapping - finding text regions on a page and plotting their coordinates - so the chrome plays the same game the pipeline does. It is a tool for sustained, close-up work, so density and legibility win over whitespace or decoration. The interface commits fully to dark: there is no light mode, because the product's use scene has no reason to want one.",
+    "keyCharacteristics": [
+      "Void-black base with a live orange-on-charcoal contour map drifting behind opaque panels",
+      "One accent color, used sparingly and only for action/state, never decoration",
+      "Dense, collapsible tool panels (Clip Studio Paint / Photoshop density)",
+      "Every icon is a hand-drawn single-stroke SVG; nothing borrowed from an icon font or emoji"
+    ],
+    "rules": [
+      { "name": "The One Signal Rule", "body": "Survey Orange is the only saturated color in the system. Reach for weight, size, or position before reaching for a new color.", "section": "colors" },
+      { "name": "The Warm Gray Rule", "body": "Secondary/tertiary text is hue-tinted toward the accent (hsl(28 ...)), never flat neutral gray.", "section": "colors" },
+      { "name": "The Mono-For-Numbers Rule", "body": "Any precisely-read numeric value renders in the mono font with tabular-nums.", "section": "typography" },
+      { "name": "The Flat-Chrome Rule", "body": "Docks, bars, and rails never carry a shadow; depth is reserved for the canvas image and true overlays.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do reach for the CSS custom properties for every color; never hardcode a hex value that matches an existing token.",
+      "Do keep Survey Orange to primary actions, active/selected state, and verified/success-adjacent signals only.",
+      "Do use the mono font with tabular-nums for any numeric value the user reads precisely.",
+      "Do author new icons as inline SVG through Icon.vue's path map, matching the 24px/1.75 stroke-weight convention.",
+      "Do keep chrome flat and reserve shadow for the canvas image and true overlays."
+    ],
+    "donts": [
+      "Don't introduce a second saturated accent color.",
+      "Don't use emoji or an icon-font glyph anywhere in the product UI.",
+      "Don't add a shadow to ordinary chrome.",
+      "Don't use plain neutral gray for secondary/tertiary text.",
+      "Don't round corners past 11px for emphasis."
+    ]
+  }
+}

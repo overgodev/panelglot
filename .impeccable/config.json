@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "codex-grid-background",
+        "value": "*",
+        "files": [
+          "front/components/CanvasViewport.vue"
+        ],
+        "createdAt": "2026-08-29T15:31:07.004Z",
+        "reason": "canvas viewport is a real image-editing surface, not decoration; rule's own carve-out covers canvas/blueprint surfaces"
+      }
+    ]
+  }
+}
