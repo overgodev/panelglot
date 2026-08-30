@@ -22,6 +22,18 @@ export interface ChunkProcessingResult {
   updatedBuffer: Uint8Array;
 }
 
+/** [x1,y1,x2,y2,x3,y3,x4,y4] - four corners, in ORIGINAL (pre-upscale) image pixel
+ * coordinates. Matches manga_translator/config.py DetectorConfig.manual_text_boxes. */
+export type ManualBox = number[];
+
+export interface OcrPreviewRegion {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  text: string;
+}
+
 export const processingStatuses = [
   "upload",
   "pending",
@@ -35,56 +47,25 @@ export const processingStatuses = [
   "rendering",
 ];
 
-export type TranslatorKey =
-  | "youdao"
-  | "baidu"
-  | "deepl"
-  | "papago"
-  | "caiyun"
-  | "sakura"
-  | "offline"
-  | "openai"
-  | "deepseek"
-  | "groq"
-  | "gemini"
-  | "custom_openai"
-  | "nllb"
-  | "nllb_big"
-  | "sugoi"
-  | "jparacrawl"
-  | "jparacrawl_big"
-  | "m2m100"
-  | "m2m100_big"
-  | "mbart50"
-  | "qwen2"
-  | "qwen2_big"
-  | "none";
+// Kept in sync with manga_translator/config.py's `Translator` enum, which
+// only has these three since the non-LM-Studio backends were removed
+// (see docs/HANDOFF.md "Translator backend cleanup").
+export type TranslatorKey = "custom_openai" | "original" | "none";
 
-export const validTranslators: TranslatorKey[] = [
-  "youdao",
-  "baidu",
-  "deepl",
-  "papago",
-  "caiyun",
-  "sakura",
-  "offline",
-  "openai",
-  "deepseek",
-  "groq",
-  "gemini",
-  "custom_openai",
-  "nllb",
-  "nllb_big",
-  "sugoi",
-  "jparacrawl",
-  "jparacrawl_big",
-  "m2m100",
-  "m2m100_big",
-  "mbart50",
-  "qwen2",
-  "qwen2_big",
-  "none",
-];
+export const validTranslators: TranslatorKey[] = ["custom_openai", "original", "none"];
+
+export type LlmServerType = "ollama" | "openai-compatible" | "unknown";
+
+export interface CustomEndpoint {
+  id: string;
+  name: string;
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  serverType: LlmServerType;
+  verified: boolean;
+  lastUsedAt: string | null;
+}
 
 export interface UploadedFile {
   id: string;
@@ -111,6 +92,12 @@ export interface TranslationSettings {
   maskDilationOffset: number;
   inpainter: string;
   colorizer: string;
+  ocr: string;
+}
+
+export interface StoryContext {
+  projectName: string;
+  glossary: string;
 }
 
 export interface FinishedImage {
@@ -119,4 +106,20 @@ export interface FinishedImage {
   result: Blob;
   finishedAt: Date;
   settings: TranslationSettings;
+}
+
+export interface StoryPage {
+  id: string;
+  originalName: string;
+  imageDataUrl: string;
+  resultDataUrl: string | null;
+}
+
+export interface SavedStory {
+  id: string;
+  name: string;
+  createdAt: string;
+  settings: TranslationSettings;
+  storyContext: StoryContext;
+  pages: StoryPage[];
 }

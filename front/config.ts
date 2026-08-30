@@ -31,10 +31,24 @@ export const detectionResolutions = [1024, 1536, 2048, 2560];
 
 export const inpaintingSizes = [516, 1024, 2048, 2560];
 
+// Kept in sync with manga_translator/config.py's `Detector` enum.
 export const textDetectorOptions = [
-  { value: "default", label: "Default" },
+  { value: "default", label: "Default (DBNet)" },
+  { value: "dbconvnext", label: "DB ConvNeXt" },
   { value: "ctd", label: "CTD" },
+  { value: "craft", label: "CRAFT (not tuned for manga)" },
   { value: "paddle", label: "Paddle" },
+  { value: "none", label: "None (skip detection)" },
+];
+
+// Kept in sync with manga_translator/config.py's `Ocr` enum. Label carries a short
+// "preferred for" language hint so the dropdown teaches itself.
+export const ocrOptions = [
+  { value: "48px", label: "Default · general CJK + EN" },
+  { value: "32px", label: "Legacy (32px) · general CJK + EN" },
+  { value: "48px_ctc", label: "CTC (48px) · CJK + EN, faster" },
+  { value: "mocr", label: "Manga OCR · Japanese only" },
+  { value: "ppocr", label: "PP-OCRv6 · best for Chinese, also EN/JP/KR" },
 ];
 
 export const inpainterOptions = [

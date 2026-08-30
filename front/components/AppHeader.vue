@@ -1,22 +1,160 @@
+<script setup lang="ts">
+defineProps<{
+  currentLabel: string | null;
+  pageIndex: number;
+  pageCount: number;
+  hasFiles: boolean;
+  isProcessing: boolean;
+  isAllFinished: boolean;
+  currentIsFinished: boolean;
+  isPreviewingOcr: boolean;
+}>();
+
+const emit = defineEmits<{
+  (e: "upload-click"): void;
+  (e: "translate"): void;
+  (e: "preview-ocr"): void;
+  (e: "download-current"): void;
+  (e: "clear"): void;
+  (e: "save-as-story"): void;
+}>();
+</script>
+
 <template>
-  <nav class="bg-white shadow">
-    <div class="mx-auto max-w-7xl px-2 sm:px-6 lg:px-8">
-      <div class="relative flex h-16 justify-between">
-        <div class="flex flex-1 items-center justify-center sm:items-stretch sm:justify-start">
-          <div class="flex shrink-0 items-center text-teal-500">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-8 w-auto text-teal-500">
-              <path
-                d="M11.25 4.533A9.707 9.707 0 0 0 6 3a9.735 9.735 0 0 0-3.25.555.75.75 0 0 0-.5.707v14.25a.75.75 0 0 0 1 .707A8.237 8.237 0 0 1 6 18.75c1.995 0 3.823.707 5.25 1.886V4.533ZM12.75 20.636A8.214 8.214 0 0 1 18 18.75c.966 0 1.89.166 2.75.47a.75.75 0 0 0 1-.708V4.262a.75.75 0 0 0-.5-.707A9.735 9.735 0 0 0 18 3a9.707 9.707 0 0 0-5.25 1.533v16.103Z"
-              />
-            </svg>
-          </div>
-          <div class="sm:ml-6 sm:flex sm:space-x-8">
-            <a href="/" class="inline-flex items-center px-1 pt-1 font-medium text-gray-900">
-              Manga Translator
-            </a>
-          </div>
-        </div>
-      </div>
+  <header
+    class="flex items-center gap-4 h-14 px-4 border-b shrink-0"
+    style="background: var(--color-surface); border-color: var(--color-border)"
+  >
+    <div class="flex items-center gap-2.5 shrink-0">
+      <Icon name="book" :size="19" style="color: var(--color-accent)" />
+      <span class="font-semibold tracking-tight text-[15px]" style="font-family: var(--font-display); color: var(--color-text)">
+        Panelglot
+      </span>
     </div>
-  </nav>
+
+    <NuxtLink to="/stories" class="btn-ghost shrink-0">
+      <Icon name="layers" :size="15" />
+      <span>Stories</span>
+    </NuxtLink>
+
+    <div class="h-5 w-px shrink-0" style="background: var(--color-border)" />
+
+    <div class="flex-1 min-w-0 flex items-center gap-2 text-sm" style="color: var(--color-text-secondary)">
+      <template v-if="hasFiles">
+        <span class="truncate" style="color: var(--color-text)">{{ currentLabel }}</span>
+        <span class="font-mono text-xs shrink-0" style="color: var(--color-text-tertiary)">
+          Page {{ pageIndex + 1 }} / {{ pageCount }}
+        </span>
+      </template>
+      <span v-else>No pages loaded yet</span>
+    </div>
+
+    <div class="flex items-center gap-2 shrink-0">
+      <button
+        type="button"
+        class="btn-ghost"
+        @click="emit('upload-click')"
+      >
+        <Icon name="upload" :size="15" />
+        <span>Upload</span>
+      </button>
+
+      <button
+        v-if="currentIsFinished"
+        type="button"
+        class="btn-ghost"
+        @click="emit('download-current')"
+      >
+        <Icon name="download" :size="15" />
+        <span>Export</span>
+      </button>
+
+      <button
+        v-if="hasFiles && !isProcessing"
+        type="button"
+        class="btn-ghost"
+        @click="emit('save-as-story')"
+      >
+        <Icon name="book" :size="15" />
+        <span>Save as Story</span>
+      </button>
+
+      <button
+        v-if="hasFiles && !isProcessing"
+        type="button"
+        class="btn-ghost"
+        @click="emit('clear')"
+      >
+        <Icon name="trash" :size="15" />
+        <span>Clear</span>
+      </button>
+
+      <button
+        v-if="hasFiles && !isProcessing && !isAllFinished"
+        type="button"
+        class="btn-ghost"
+        :disabled="isPreviewingOcr"
+        title="Run detection + OCR only and show what text was caught, without translating"
+        @click="emit('preview-ocr')"
+      >
+        <span
+          v-if="isPreviewingOcr"
+          class="w-3 h-3 rounded-full border-2 animate-spin shrink-0"
+          style="border-color: var(--color-text-secondary); border-top-color: transparent"
+        />
+        <Icon v-else name="image" :size="15" />
+        <span>Preview OCR</span>
+      </button>
+
+      <button
+        v-if="hasFiles && !isProcessing && !isAllFinished"
+        type="button"
+        class="btn-accent"
+        @click="emit('translate')"
+      >
+        Translate All
+      </button>
+    </div>
+  </header>
 </template>
+
+<style scoped>
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-raised);
+}
+
+.btn-ghost:disabled {
+  opacity: 0.5;
+}
+
+.btn-accent {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  color: #17110a;
+  background: var(--color-accent);
+  transition: background-color 120ms ease;
+}
+
+.btn-accent:hover {
+  background: var(--color-accent-strong);
+}
+</style>

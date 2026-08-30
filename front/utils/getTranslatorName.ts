@@ -1,6 +1,12 @@
 import type { TranslatorKey } from "~/types";
 
 export function getTranslatorName(key: TranslatorKey): string {
-  if (key === "none") return "No Text";
-  return key[0].toUpperCase() + key.slice(1);
+  switch (key) {
+    case "none":
+      return "No Text";
+    case "original":
+      return "Original (no translation)";
+    case "custom_openai":
+      return "Custom Endpoint (LM Studio / Ollama)";
+  }
 }

@@ -7,20 +7,38 @@ import {
   type TranslationSettings,
   type FinishedImage,
   type UploadedFile,
+  type CustomEndpoint,
+  type SavedStory,
+  type ManualBox,
+  type OcrPreviewRegion,
+  validTranslators,
 } from "~/types";
 import { imageMimeTypes } from "~/config";
+import { blobToDataUrl, dataUrlToFile, dataUrlToBlob } from "~/utils/blob";
+import type { Ref } from "vue";
 
 // State
 const files = ref<UploadedFile[]>([]);
 const fileStatuses = ref<Map<string, FileStatus>>(new Map());
 const finishedImages = ref<FinishedImage[]>([]);
+const currentId = ref<string | null>(null);
+const tool = ref<"pointer" | "pan" | "lasso">("pointer");
+const zoom = ref(1);
+const fileInputRef = ref<HTMLInputElement | null>(null);
+const rightDockRef = ref<{ markEndpointVerified: () => void } | null>(null);
+const showSaveStoryDialog = ref(false);
+const manualBoxes = ref<Map<string, ManualBox[]>>(new Map());
+const previewRegions = ref<Map<string, OcrPreviewRegion[]>>(new Map());
+const pageOverrides = ref<Map<string, Partial<TranslationSettings>>>(new Map());
+const isPreviewingOcr = ref(false);
 
 // Translation options
 const detectionResolution = ref("1536");
 const textDetector = ref("default");
 const renderTextDirection = ref("auto");
-const translator = ref<TranslatorKey>("youdao");
+const translator = ref<TranslatorKey>("custom_openai");
 const targetLanguage = ref("CHS");
+const endpoint = ref<CustomEndpoint | null>(null);
 
 const inpaintingSize = ref("2048");
 const customUnclipRatio = ref(2.3);
@@ -28,6 +46,10 @@ const customBoxThreshold = ref(0.7);
 const maskDilationOffset = ref(30);
 const inpainter = ref("default");
 const colorizer = ref("none");
+const ocr = ref("48px");
+
+const projectName = ref("");
+const glossary = ref("");
 
 // Computed
 const isProcessing = computed(() => {
@@ -46,6 +68,10 @@ const isProcessingAllFinished = computed(() => {
   });
 });
 
+const currentIndex = computed(() => files.value.findIndex((f) => f.id === currentId.value));
+const currentFile = computed(() => files.value.find((f) => f.id === currentId.value) ?? null);
+const currentStatus = computed(() => (currentId.value ? fileStatuses.value.get(currentId.value) ?? null : null));
+
 const currentSettings = (): TranslationSettings => ({
   detectionResolution: detectionResolution.value,
   textDetector: textDetector.value,
@@ -58,7 +84,101 @@ const currentSettings = (): TranslationSettings => ({
   maskDilationOffset: maskDilationOffset.value,
   inpainter: inpainter.value,
   colorizer: colorizer.value,
+  ocr: ocr.value,
 });
+
+// Per-page settings overrides: each page can carry its own partial settings on top of the
+// global defaults above (see RightDock's "Custom settings for this page" toggle). The raw
+// refs (detectionResolution etc.) stay the persisted global defaults; these *Field proxies
+// are what the UI actually binds to, transparently reading/writing the current page's
+// override when one is enabled.
+const pageOverrideEnabled = computed<boolean>({
+  get: () => currentId.value !== null && pageOverrides.value.has(currentId.value),
+  set: (enabled) => {
+    if (!currentId.value) return;
+    const next = new Map(pageOverrides.value);
+    if (enabled) next.set(currentId.value, {});
+    else next.delete(currentId.value);
+    pageOverrides.value = next;
+  },
+});
+
+const resolvedSettingsFor = (pageId: string | null): TranslationSettings => {
+  const base = currentSettings();
+  if (!pageId) return base;
+  const override = pageOverrides.value.get(pageId);
+  return override ? { ...base, ...override } : base;
+};
+
+const fieldProxy = <K extends keyof TranslationSettings>(key: K, globalRef: Ref<TranslationSettings[K]>) =>
+  computed<TranslationSettings[K]>({
+    get() {
+      if (currentId.value) {
+        const override = pageOverrides.value.get(currentId.value);
+        if (override && key in override) return override[key] as TranslationSettings[K];
+      }
+      return globalRef.value;
+    },
+    set(value) {
+      if (currentId.value && pageOverrides.value.has(currentId.value)) {
+        const next = new Map(pageOverrides.value);
+        next.set(currentId.value, { ...next.get(currentId.value), [key]: value });
+        pageOverrides.value = next;
+      } else {
+        globalRef.value = value;
+      }
+    },
+  });
+
+const detectionResolutionField = fieldProxy("detectionResolution", detectionResolution);
+const textDetectorField = fieldProxy("textDetector", textDetector);
+const renderTextDirectionField = fieldProxy("renderTextDirection", renderTextDirection);
+const translatorField = fieldProxy("translator", translator);
+const targetLanguageField = fieldProxy("targetLanguage", targetLanguage);
+const inpaintingSizeField = fieldProxy("inpaintingSize", inpaintingSize);
+const customUnclipRatioField = fieldProxy("customUnclipRatio", customUnclipRatio);
+const customBoxThresholdField = fieldProxy("customBoxThreshold", customBoxThreshold);
+const maskDilationOffsetField = fieldProxy("maskDilationOffset", maskDilationOffset);
+const inpainterField = fieldProxy("inpainter", inpainter);
+const colorizerField = fieldProxy("colorizer", colorizer);
+const ocrField = fieldProxy("ocr", ocr);
+
+const applySettings = (settings: TranslationSettings) => {
+  detectionResolution.value = settings.detectionResolution;
+  textDetector.value = settings.textDetector;
+  renderTextDirection.value = settings.renderTextDirection;
+  if ((validTranslators as string[]).includes(settings.translator)) translator.value = settings.translator;
+  targetLanguage.value = settings.targetLanguage;
+  inpaintingSize.value = settings.inpaintingSize;
+  customUnclipRatio.value = settings.customUnclipRatio;
+  customBoxThreshold.value = settings.customBoxThreshold;
+  maskDilationOffset.value = settings.maskDilationOffset;
+  inpainter.value = settings.inpainter;
+  colorizer.value = settings.colorizer;
+  ocr.value = settings.ocr;
+};
+
+const hydrateStory = (story: SavedStory) => {
+  const restoredFiles: UploadedFile[] = [];
+  const restoredStatuses = new Map<string, FileStatus>();
+  for (const page of story.pages) {
+    const file = dataUrlToFile(page.imageDataUrl, page.originalName);
+    restoredFiles.push({ id: page.id, file });
+    restoredStatuses.set(page.id, {
+      status: page.resultDataUrl ? "finished" : null,
+      progress: null,
+      queuePos: null,
+      result: page.resultDataUrl ? dataUrlToBlob(page.resultDataUrl) : null,
+      error: null,
+    });
+  }
+  files.value = restoredFiles;
+  fileStatuses.value = restoredStatuses;
+  currentId.value = restoredFiles[0]?.id ?? null;
+  applySettings(story.settings);
+  projectName.value = story.storyContext.projectName;
+  glossary.value = story.storyContext.glossary;
+};
 
 // Load saved settings / gallery, wire up paste handling
 onMounted(() => {
@@ -66,7 +186,9 @@ onMounted(() => {
   if (saved.detectionResolution) detectionResolution.value = saved.detectionResolution;
   if (saved.textDetector) textDetector.value = saved.textDetector;
   if (saved.renderTextDirection) renderTextDirection.value = saved.renderTextDirection;
-  if (saved.translator) translator.value = saved.translator;
+  if (saved.translator && (validTranslators as string[]).includes(saved.translator)) {
+    translator.value = saved.translator;
+  }
   if (saved.targetLanguage) targetLanguage.value = saved.targetLanguage;
   if (saved.inpaintingSize) inpaintingSize.value = saved.inpaintingSize;
   if (saved.customUnclipRatio) customUnclipRatio.value = saved.customUnclipRatio;
@@ -74,8 +196,21 @@ onMounted(() => {
   if (saved.maskDilationOffset) maskDilationOffset.value = saved.maskDilationOffset;
   if (saved.inpainter) inpainter.value = saved.inpainter;
   if (saved.colorizer) colorizer.value = saved.colorizer;
+  if (saved.ocr) ocr.value = saved.ocr;
+
+  const savedStory = loadStoryContext();
+  if (savedStory.projectName) projectName.value = savedStory.projectName;
+  if (savedStory.glossary) glossary.value = savedStory.glossary;
 
   finishedImages.value = loadFinishedImages();
+
+  const route = useRoute();
+  const openStoryId = route.query.openStory;
+  if (typeof openStoryId === "string") {
+    const story = loadStories().find((s) => s.id === openStoryId);
+    if (story) hydrateStory(story);
+    navigateTo({ path: "/" }, { replace: true });
+  }
 
   window.addEventListener("paste", handlePaste);
 });
@@ -97,9 +232,12 @@ watch(
     maskDilationOffset,
     inpainter,
     colorizer,
+    ocr,
   ],
   () => saveSettings(currentSettings())
 );
+
+watch([projectName, glossary], () => saveStoryContext({ projectName: projectName.value, glossary: glossary.value }));
 
 // File handling
 const toUploadedFiles = (rawFiles: File[]): UploadedFile[] =>
@@ -108,13 +246,19 @@ const toUploadedFiles = (rawFiles: File[]): UploadedFile[] =>
     file,
   }));
 
+const addFiles = (newFiles: UploadedFile[]) => {
+  if (newFiles.length === 0) return;
+  files.value = [...files.value, ...newFiles];
+  currentId.value = newFiles[0].id;
+};
+
 const handlePaste = (e: ClipboardEvent) => {
   const items = e.clipboardData?.items || [];
   for (const item of items) {
     if (item.kind === "file") {
       const pastedFile = item.getAsFile();
       if (pastedFile && imageMimeTypes.includes(pastedFile.type)) {
-        files.value = [...files.value, ...toUploadedFiles([pastedFile])];
+        addFiles(toUploadedFiles([pastedFile]));
         break;
       }
     }
@@ -124,32 +268,106 @@ const handlePaste = (e: ClipboardEvent) => {
 const handleDrop = (e: DragEvent) => {
   const droppedFiles = Array.from(e.dataTransfer?.files || []);
   const validFiles = droppedFiles.filter((file) => imageMimeTypes.includes(file.type));
-  files.value = [...files.value, ...toUploadedFiles(validFiles)];
+  addFiles(toUploadedFiles(validFiles));
 };
 
 const handleFileChange = (e: Event) => {
   const input = e.target as HTMLInputElement;
   const selectedFiles = Array.from(input.files || []);
   const validFiles = selectedFiles.filter((file) => imageMimeTypes.includes(file.type));
-  files.value = [...files.value, ...toUploadedFiles(validFiles)];
+  addFiles(toUploadedFiles(validFiles));
   input.value = "";
 };
 
+const triggerUpload = () => fileInputRef.value?.click();
+
 const removeFile = (id: string) => {
+  const idx = files.value.findIndex((f) => f.id === id);
   files.value = files.value.filter((uploaded) => uploaded.id !== id);
   const next = new Map(fileStatuses.value);
   next.delete(id);
   fileStatuses.value = next;
+
+  const nextManual = new Map(manualBoxes.value);
+  nextManual.delete(id);
+  manualBoxes.value = nextManual;
+  const nextPreview = new Map(previewRegions.value);
+  nextPreview.delete(id);
+  previewRegions.value = nextPreview;
+  const nextOverrides = new Map(pageOverrides.value);
+  nextOverrides.delete(id);
+  pageOverrides.value = nextOverrides;
+
+  if (currentId.value === id) {
+    const fallback = files.value[idx] ?? files.value[idx - 1] ?? files.value[0];
+    currentId.value = fallback ? fallback.id : null;
+  }
 };
 
 const clearForm = () => {
   files.value = [];
   fileStatuses.value = new Map();
+  currentId.value = null;
+  manualBoxes.value = new Map();
+  previewRegions.value = new Map();
+  pageOverrides.value = new Map();
+};
+
+const addManualBox = (box: ManualBox) => {
+  if (!currentId.value) return;
+  const next = new Map(manualBoxes.value);
+  next.set(currentId.value, [...(next.get(currentId.value) ?? []), box]);
+  manualBoxes.value = next;
+};
+
+const removeManualBox = (index: number) => {
+  if (!currentId.value) return;
+  const next = new Map(manualBoxes.value);
+  const list = [...(next.get(currentId.value) ?? [])];
+  list.splice(index, 1);
+  next.set(currentId.value, list);
+  manualBoxes.value = next;
+};
+
+const buildSavedStory = async (name: string): Promise<SavedStory> => {
+  const pages = await Promise.all(
+    files.value.map(async (uploaded) => {
+      const status = fileStatuses.value.get(uploaded.id);
+      const imageDataUrl = await blobToDataUrl(uploaded.file);
+      const resultDataUrl = status?.result ? await blobToDataUrl(status.result) : null;
+      return { id: uploaded.id, originalName: uploaded.file.name, imageDataUrl, resultDataUrl };
+    })
+  );
+  return {
+    id: `story-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    name,
+    createdAt: new Date().toISOString(),
+    settings: currentSettings(),
+    storyContext: { projectName: projectName.value, glossary: glossary.value },
+    pages,
+  };
+};
+
+const confirmSaveStory = async (name: string) => {
+  const story = await buildSavedStory(name);
+  saveStories([...loadStories(), story]);
+  showSaveStoryDialog.value = false;
+  clearForm();
 };
 
 const clearGallery = () => {
   finishedImages.value = [];
   localStorage.removeItem("manga-translator-finished-images");
+};
+
+const downloadCurrent = () => {
+  if (!currentStatus.value?.result || !currentFile.value) return;
+  const url = URL.createObjectURL(currentStatus.value.result);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = currentFile.value.file.name.replace(/\.[^.]+$/, "") + "-translated.png";
+  a.click();
+  URL.revokeObjectURL(url);
 };
 
 // Status bookkeeping
@@ -174,10 +392,12 @@ const recordFinishedImage = (fileId: string, originalName: string, result: Blob)
     originalName,
     result,
     finishedAt: new Date(),
-    settings: currentSettings(),
+    settings: resolvedSettingsFor(fileId),
   };
   finishedImages.value = [finishedImage, ...finishedImages.value];
   addFinishedImage(finishedImage);
+
+  if (translator.value === "custom_openai") rightDockRef.value?.markEndpointVerified();
 };
 
 const processStatusUpdate = (statusCode: number, decodedData: string, fileId: string, data: Uint8Array) => {
@@ -281,49 +501,51 @@ const processSingleFileStream = async (uploaded: UploadedFile, config: string) =
   }
 };
 
-// Whole-story batch translation
-const buildTranslationConfigObject = () => ({
-  detector: {
-    detector: textDetector.value,
-    detection_size: detectionResolution.value,
-    box_threshold: customBoxThreshold.value,
-    unclip_ratio: customUnclipRatio.value,
-  },
-  render: {
-    direction: renderTextDirection.value,
-  },
-  translator: {
-    translator: translator.value,
-    target_lang: targetLanguage.value,
-  },
-  inpainter: {
-    inpainter: inpainter.value,
-    inpainting_size: inpaintingSize.value,
-  },
-  colorizer: {
-    colorizer: colorizer.value,
-  },
-  mask_dilation_offset: maskDilationOffset.value,
-});
-
-const fileToDataUrl = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-
-const dataUrlToBlob = (dataUrl: string): Blob => {
-  const [, base64] = dataUrl.split(",", 2);
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new Blob([bytes], { type: "image/png" });
+// Per-page config: each page can have its own resolved settings (see pageOverrides above)
+// and its own manually-marked text boxes, so this is built per page rather than once.
+const buildTranslationConfigObjectFor = (pageId: string) => {
+  const s = resolvedSettingsFor(pageId);
+  const manual = manualBoxes.value.get(pageId);
+  return {
+    detector: {
+      detector: s.textDetector,
+      detection_size: s.detectionResolution,
+      box_threshold: s.customBoxThreshold,
+      unclip_ratio: s.customUnclipRatio,
+      ...(manual && manual.length ? { manual_text_boxes: manual } : {}),
+    },
+    render: {
+      direction: s.renderTextDirection,
+    },
+    translator: {
+      translator: s.translator,
+      target_lang: s.targetLanguage,
+      ...(s.translator === "custom_openai" && endpoint.value
+        ? {
+            custom_openai_base_url: endpoint.value.baseUrl,
+            custom_openai_model: endpoint.value.model || null,
+            custom_openai_api_key: endpoint.value.apiKey || null,
+          }
+        : {}),
+    },
+    inpainter: {
+      inpainter: s.inpainter,
+      inpainting_size: s.inpaintingSize,
+    },
+    colorizer: {
+      colorizer: s.colorizer,
+    },
+    ocr: {
+      ocr: s.ocr,
+    },
+    mask_dilation_offset: s.maskDilationOffset,
+  };
 };
 
+const fileToDataUrl = blobToDataUrl;
+
 const processBatchTranslation = async () => {
-  const config = buildTranslationConfigObject();
+  const configs = files.value.map(({ id }) => buildTranslationConfigObjectFor(id));
 
   files.value.forEach(({ id }) => updateFileStatus(id, { status: "translating" }));
 
@@ -333,7 +555,7 @@ const processBatchTranslation = async () => {
     const response = await fetch(`/api/translate/batch/json-images`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ images, config, batch_size: files.value.length }),
+      body: JSON.stringify({ images, configs, batch_size: files.value.length }),
     });
 
     if (!response.ok) throw new Error(`Batch translation failed: ${response.status}`);
@@ -370,9 +592,12 @@ const processTranslation = async () => {
     return;
   }
 
-  const config = JSON.stringify(buildTranslationConfigObject());
   try {
-    await Promise.all(files.value.map((uploaded) => processSingleFileStream(uploaded, config)));
+    await Promise.all(
+      files.value.map((uploaded) =>
+        processSingleFileStream(uploaded, JSON.stringify(buildTranslationConfigObjectFor(uploaded.id)))
+      )
+    );
   } catch (err) {
     console.error("Translation process failed:", err);
   }
@@ -383,45 +608,122 @@ const handleSubmit = () => {
   resetFileStatuses();
   processTranslation();
 };
+
+const previewOcrError = ref<string | null>(null);
+
+const previewOcr = async () => {
+  if (!currentFile.value || !currentId.value) return;
+  const pageId = currentId.value;
+  isPreviewingOcr.value = true;
+  previewOcrError.value = null;
+  try {
+    const formData = new FormData();
+    formData.append("image", currentFile.value.file);
+    formData.append("config", JSON.stringify(buildTranslationConfigObjectFor(pageId)));
+
+    const response = await fetch("/api/translate/with-form/ocr-preview", { method: "POST", body: formData });
+    if (!response.ok) throw new Error(`Preview failed: ${response.status}`);
+
+    const data: { regions: OcrPreviewRegion[] } = await response.json();
+    const next = new Map(previewRegions.value);
+    next.set(pageId, data.regions);
+    previewRegions.value = next;
+  } catch (err) {
+    console.error("OCR preview failed:", err);
+    previewOcrError.value = err instanceof Error ? err.message : "OCR preview failed";
+  } finally {
+    isPreviewingOcr.value = false;
+  }
+};
 </script>
 
 <template>
-  <div>
-    <AppHeader />
-    <div class="bg-gray-100 min-h-screen flex flex-col pt-10 items-center">
-      <div class="bg-white shadow-md rounded-lg p-6 w-full max-w-6xl space-y-6">
-        <OptionsPanel
-          v-model:detectionResolution="detectionResolution"
-          v-model:textDetector="textDetector"
-          v-model:renderTextDirection="renderTextDirection"
-          v-model:translator="translator"
-          v-model:targetLanguage="targetLanguage"
-          v-model:inpaintingSize="inpaintingSize"
-          v-model:customUnclipRatio="customUnclipRatio"
-          v-model:customBoxThreshold="customBoxThreshold"
-          v-model:maskDilationOffset="maskDilationOffset"
-          v-model:inpainter="inpainter"
-          v-model:colorizer="colorizer"
-        />
+  <div class="h-screen flex flex-col overflow-hidden">
+    <AppHeader
+      :current-label="currentFile?.file.name ?? null"
+      :page-index="currentIndex < 0 ? 0 : currentIndex"
+      :page-count="files.length"
+      :has-files="files.length > 0"
+      :is-processing="isProcessing"
+      :is-all-finished="isProcessingAllFinished"
+      :current-is-finished="currentStatus?.status === 'finished'"
+      :is-previewing-ocr="isPreviewingOcr"
+      @upload-click="triggerUpload"
+      @translate="handleSubmit"
+      @preview-ocr="previewOcr"
+      @download-current="downloadCurrent"
+      @clear="clearForm"
+      @save-as-story="showSaveStoryDialog = true"
+    />
 
-        <div class="border-t pt-6">
-          <ImageHandlingArea
-            :files="files"
-            :file-statuses="fileStatuses"
-            :is-processing="isProcessing"
-            :is-processing-all-finished="isProcessingAllFinished"
-            @file-change="handleFileChange"
-            @drop="handleDrop"
-            @submit="handleSubmit"
-            @clear="clearForm"
-            @remove="removeFile"
-          />
-        </div>
+    <div class="flex flex-1 min-h-0">
+      <ToolRail v-model:tool="tool" v-model:zoom="zoom" @upload-click="triggerUpload" />
 
-        <div class="border-t pt-6">
-          <ResultGallery :finished-images="finishedImages" @clear-gallery="clearGallery" />
-        </div>
-      </div>
+      <CanvasViewport
+        :file="currentFile?.file ?? null"
+        :result="currentStatus?.result ?? null"
+        :status="currentStatus"
+        :zoom="zoom"
+        :tool="tool"
+        :manual-boxes="currentId ? manualBoxes.get(currentId) ?? [] : []"
+        :preview-regions="currentId ? previewRegions.get(currentId) ?? null : null"
+        :extra-error="previewOcrError"
+        @drop="handleDrop"
+        @file-change="handleFileChange"
+        @add-manual-box="addManualBox"
+        @remove-manual-box="removeManualBox"
+      />
+
+      <RightDock
+        ref="rightDockRef"
+        v-model:endpoint="endpoint"
+        v-model:pageOverrideEnabled="pageOverrideEnabled"
+        v-model:detectionResolution="detectionResolutionField"
+        v-model:textDetector="textDetectorField"
+        v-model:renderTextDirection="renderTextDirectionField"
+        v-model:translator="translatorField"
+        v-model:targetLanguage="targetLanguageField"
+        v-model:inpaintingSize="inpaintingSizeField"
+        v-model:customUnclipRatio="customUnclipRatioField"
+        v-model:customBoxThreshold="customBoxThresholdField"
+        v-model:maskDilationOffset="maskDilationOffsetField"
+        v-model:inpainter="inpainterField"
+        v-model:colorizer="colorizerField"
+        v-model:ocr="ocrField"
+        v-model:projectName="projectName"
+        v-model:glossary="glossary"
+        :finished-images="finishedImages"
+        :current-page-label="currentFile?.file.name ?? null"
+        @clear-gallery="clearGallery"
+      />
     </div>
+
+    <PageFilmstrip
+      :files="files"
+      :file-statuses="fileStatuses"
+      :current-id="currentId"
+      :is-processing="isProcessing"
+      :is-processing-all-finished="isProcessingAllFinished"
+      @select="(id) => (currentId = id)"
+      @remove="removeFile"
+      @upload-click="triggerUpload"
+    />
+
+    <input
+      ref="fileInputRef"
+      type="file"
+      multiple
+      accept="image/png,image/jpeg,image/bmp,image/webp"
+      class="hidden"
+      @change="handleFileChange"
+    />
+
+    <SaveStoryDialog
+      :open="showSaveStoryDialog"
+      :default-name="projectName"
+      :page-count="files.length"
+      @close="showSaveStoryDialog = false"
+      @confirm="confirmSaveStory"
+    />
   </div>
 </template>
