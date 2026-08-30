@@ -123,3 +123,36 @@ def to_translation(ctx: Context) -> TranslationResponse:
     debug_folder = getattr(ctx, 'debug_folder', None)
 
     return TranslationResponse(translations=results, debug_folder=debug_folder)
+
+
+class OcrPreviewRegion(BaseModel):
+    minX: int
+    minY: int
+    maxX: int
+    maxY: int
+    text: str
+
+
+class OcrPreviewResponse(BaseModel):
+    regions: List[OcrPreviewRegion]
+
+
+def to_ocr_preview(ctx: Context) -> OcrPreviewResponse:
+    """Serializes a Context stopped early (Config.ocr_preview_only) right after OCR/
+    textline-merge - no translation, inpainting, or rendering has run, so there's no
+    ctx.img_inpainted to build a Translation from. Coordinates are scaled back from
+    ctx.img_rgb (post colorize/upscale) to ctx.input's original size, since the web UI
+    overlays these boxes on the original uploaded image, not an internal upscaled copy."""
+    text_regions = ctx.text_regions or []
+    in_w, in_h = ctx.input.size
+    img_h, img_w = ctx.img_rgb.shape[:2]
+    scale_x, scale_y = img_w / in_w, img_h / in_h
+    regions = []
+    for blk in text_regions:
+        minX, minY, maxX, maxY = blk.xyxy
+        regions.append(OcrPreviewRegion(
+            minX=int(minX / scale_x), minY=int(minY / scale_y),
+            maxX=int(maxX / scale_x), maxY=int(maxY / scale_y),
+            text=blk.text,
+        ))
+    return OcrPreviewResponse(regions=regions)

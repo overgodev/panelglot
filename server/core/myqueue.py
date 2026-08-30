@@ -43,17 +43,18 @@ class QueueElement:
 
 
 class BatchQueueElement:
-    """Batch translation queue element"""
+    """Batch translation queue element. One Config per image, so each page can carry
+    its own settings and manual text boxes rather than one config for the whole batch."""
     req: Request
     images: List[Image.Image]
-    config: Config
+    configs: List[Config]
     batch_size: int
     output_format: str
 
-    def __init__(self, req: Request, images: List[Image.Image], config: Config, batch_size: int, output_format: str = "json"):
+    def __init__(self, req: Request, images: List[Image.Image], configs: List[Config], batch_size: int, output_format: str = "json"):
         self.req = req
         self.images = images
-        self.config = config
+        self.configs = configs
         self.batch_size = batch_size
         self.output_format = output_format
 
@@ -118,9 +119,9 @@ async def wait_in_queue(task: QueueElement | BatchQueueElement, notify: NotifyTy
                 # Process batch translation task
                 if isinstance(task, BatchQueueElement):
                     if notify:
-                        await instance.sent_batch_stream(task.images, task.config, task.batch_size, task.output_format, notify)
+                        await instance.sent_batch_stream(task.images, task.configs, task.batch_size, task.output_format, notify)
                     else:
-                        result = await instance.sent_batch(task.images, task.config, task.batch_size, task.output_format)
+                        result = await instance.sent_batch(task.images, task.configs, task.batch_size, task.output_format)
                 else:
                     # Process single translation task
                     if notify:

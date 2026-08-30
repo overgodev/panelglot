@@ -51,6 +51,10 @@ class CustomOpenAiTranslator(ConfigGPT, CommonTranslator):
         self.config = args.chatgpt_config
         if getattr(args, 'custom_openai_model', None):
             self.model = args.custom_openai_model
+        if getattr(args, 'custom_openai_base_url', None):
+            self.client.base_url = args.custom_openai_base_url
+        if getattr(args, 'custom_openai_api_key', None):
+            self.client.api_key = args.custom_openai_api_key
 
     def set_prev_context(self, text: str = ""):
         self.prev_context = text or ""

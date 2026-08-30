@@ -26,10 +26,21 @@ class BatchTranslateRequest(BaseModel):
     """Batch translation request"""
     images: list[bytes|str]
     """List of images, can be URLs, base64 encoded strings, or binary data"""
+    configs: list[Config] | None = None
+    """One config per image (same order as `images`) - lets each page carry its own
+    settings and manual text boxes. Falls back to `config` repeated for every image
+    when omitted, for backward compatibility."""
     config: Config = Config()
-    """Translation configuration"""
+    """Shared config used for every image when `configs` isn't provided."""
     batch_size: int = 4
     """Batch size, default is 4"""
+
+    def resolved_configs(self) -> list[Config]:
+        if self.configs is not None:
+            if len(self.configs) != len(self.images):
+                raise HTTPException(422, detail="`configs` must have exactly one entry per image in `images`")
+            return self.configs
+        return [self.config] * len(self.images)
 
 async def to_pil_image(image: Union[str, bytes]) -> Image.Image:
     try:
@@ -74,9 +85,13 @@ async def while_streaming(req: Request, config: Config, image: bytes | str, outp
     asyncio.create_task(wait_in_queue(task, notify_internal))
     return streaming_response
 
-async def get_batch_ctx(req: Request, config: Config, images: list[str|bytes], batch_size: int = 4, output_format: str = "json") -> list:
-    """Process batch translation request. Returns a list of already-serialized
+async def get_batch_ctx(req: Request, configs: list[Config], images: list[str|bytes], batch_size: int = 4, output_format: str = "json") -> list:
+    """Process batch translation request. `configs` has one entry per image (see
+    BatchTranslateRequest.resolved_configs). Returns a list of already-serialized
     wire bytes (or None for a failed/placeholder-free entry), one per image."""
+    if len(configs) != len(images):
+        raise HTTPException(422, detail="`configs` must have exactly one entry per image in `images`")
+
     # Convert images to PIL Image objects
     pil_images = []
     for img in images:
@@ -84,7 +99,7 @@ async def get_batch_ctx(req: Request, config: Config, images: list[str|bytes], b
         pil_images.append(pil_img)
 
     # Create batch task
-    batch_task = BatchQueueElement(req, pil_images, config, batch_size, output_format)
+    batch_task = BatchQueueElement(req, pil_images, configs, batch_size, output_format)
     task_queue.add_task(batch_task)
 
     return await wait_in_queue(batch_task, None)

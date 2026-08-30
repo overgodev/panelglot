@@ -38,24 +38,26 @@ class ExecutorInstance(BaseModel):
     async def sent_stream(self, image: Image, config: Config, output_format: str, sender: NotifyType):
         await fetch_data_stream("http://"+self.ip+":"+str(self.port)+"/execute/translate", image, config, output_format, sender, headers=self._headers())
 
-    async def sent_batch(self, images: List[Image.Image], config: Config, batch_size: int, output_format: str):
-        """发送批量翻译请求"""
+    async def sent_batch(self, images: List[Image.Image], configs: List[Config], batch_size: int, output_format: str):
+        """发送批量翻译请求 - one config per image, so each page can carry its own settings
+        and manual text boxes."""
         body = {
             "images_b64": [encode_image_b64(image) for image in images],
-            "config": config.model_dump(mode="json"),
-            "config_extra": _config_extra(config),
+            "configs": [c.model_dump(mode="json") for c in configs],
+            "configs_extra": [_config_extra(c) for c in configs],
             "batch_size": batch_size,
             "output_format": output_format,
         }
         return await fetch_data_raw("http://"+self.ip+":"+str(self.port)+"/simple_execute/translate_batch",
                                body, headers=self._headers())
 
-    async def sent_batch_stream(self, images: List[Image.Image], config: Config, batch_size: int, output_format: str, sender: NotifyType):
-        """发送批量翻译流式请求"""
+    async def sent_batch_stream(self, images: List[Image.Image], configs: List[Config], batch_size: int, output_format: str, sender: NotifyType):
+        """发送批量翻译流式请求 - one config per image, so each page can carry its own settings
+        and manual text boxes."""
         body = {
             "images_b64": [encode_image_b64(image) for image in images],
-            "config": config.model_dump(mode="json"),
-            "config_extra": _config_extra(config),
+            "configs": [c.model_dump(mode="json") for c in configs],
+            "configs_extra": [_config_extra(c) for c in configs],
             "batch_size": batch_size,
             "output_format": output_format,
         }

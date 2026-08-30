@@ -24,8 +24,10 @@ from manga_translator.mode.response import TranslationResponse
 from server.core.instance import ExecutorInstance, executor_instances
 from server.core.myqueue import task_queue
 from server.api.request_extraction import get_ctx, while_streaming, TranslateRequest, BatchTranslateRequest, get_batch_ctx
+from server.api.llm_probe import router as llm_probe_router
 
 app = FastAPI()
+app.include_router(llm_probe_router)
 nonce = None
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -84,6 +86,15 @@ async def json_form(req: Request, image: UploadFile = File(...), config: str = F
     conf = Config.parse_raw(config)
     conf._original_filename = image.filename
     result_bytes = await get_ctx(req, conf, img, output_format="json")
+    return Response(content=result_bytes, media_type="application/json")
+
+@app.post("/translate/with-form/ocr-preview", tags=["api", "form"], response_description="Recognized text regions (bbox + raw OCR text, no translation/inpainting/rendering) for the web UI's Preview OCR button. Forces config.ocr_preview_only=true regardless of what the client sent.")
+async def ocr_preview_form(req: Request, image: UploadFile = File(...), config: str = Form("{}")):
+    img = await image.read()
+    conf = Config.parse_raw(config)
+    conf._original_filename = image.filename
+    conf.ocr_preview_only = True
+    result_bytes = await get_ctx(req, conf, img, output_format="ocr_preview")
     return Response(content=result_bytes, media_type="application/json")
 
 @app.post("/translate/with-form/bytes", response_class=StreamingResponse, tags=["api", "form"],response_description="custom byte structure for decoding look at examples in 'examples/response.*'")
@@ -173,7 +184,7 @@ async def get_result_by_folder(folder_name: str):
 @app.post("/translate/batch/json", response_model=list[TranslationResponse], tags=["api", "json", "batch"])
 async def batch_json(req: Request, data: BatchTranslateRequest):
     """Batch translate images and return JSON format results"""
-    results = await get_batch_ctx(req, data.config, data.images, data.batch_size, output_format="json")
+    results = await get_batch_ctx(req, data.resolved_configs(), data.images, data.batch_size, output_format="json")
     return [TranslationResponse.model_validate_json(r) for r in results]
 
 @app.post("/translate/batch/images", response_description="Zip file containing translated images", tags=["api", "batch"])
@@ -182,7 +193,7 @@ async def batch_images(req: Request, data: BatchTranslateRequest):
     import zipfile
     import tempfile
 
-    results = await get_batch_ctx(req, data.config, data.images, data.batch_size, output_format="image")
+    results = await get_batch_ctx(req, data.resolved_configs(), data.images, data.batch_size, output_format="image")
 
     # Create temporary ZIP file
     with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_file:
@@ -209,7 +220,7 @@ async def batch_json_images(req: Request, data: BatchTranslateRequest):
     """Batch-translate all given images together (OCR'd up front, then translated as a single
     combined pass so the translator sees the whole story's text at once for better cross-page
     context) and return the final rendered pages as base64 PNG data URLs, in input order."""
-    results = await get_batch_ctx(req, data.config, data.images, data.batch_size, output_format="image")
+    results = await get_batch_ctx(req, data.resolved_configs(), data.images, data.batch_size, output_format="image")
     encoded: list[Optional[str]] = []
     for png_bytes in results:
         if png_bytes is not None:

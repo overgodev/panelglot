@@ -207,6 +207,13 @@ class TranslatorConfig(BaseModel):
     custom_openai_model: Optional[str] = None
     """Overrides the model name sent to the custom_openai (LM Studio/Ollama/etc.) endpoint for
     this request. If unset, falls back to the CUSTOM_OPENAI_MODEL env var / server default."""
+    custom_openai_base_url: Optional[str] = None
+    """Overrides the custom_openai endpoint URL (e.g. http://192.168.1.20:1234/v1) for this
+    request. If unset, falls back to the CUSTOM_OPENAI_API_BASE env var / server default."""
+    custom_openai_api_key: Optional[str] = None
+    """Overrides the auth token sent to the custom_openai endpoint for this request. Most local
+    endpoints (LM Studio, Ollama) ignore this; leave unset to fall back to the
+    CUSTOM_OPENAI_API_KEY env var / server default."""
     translator_chain: Optional[str] = None
     """Output of one translator goes in another. Example: --translator-chain "google:JPN;sugoi:ENG"."""
     selective_translation: Optional[str] = None
@@ -265,6 +272,13 @@ class DetectorConfig(BaseModel):
     """Invert the image colors for detection. Might improve detection."""
     det_gamma_correct: bool = False
     """Applies gamma correction for detection. Might improve detection."""
+    manual_text_boxes: Optional[List[List[float]]] = None
+    """User-drawn rectangles (from the web UI's box/lasso tool) marking regions the automatic
+    detector missed - e.g. stylized SFX or floating text. Each box is
+    [x1,y1,x2,y2,x3,y3,x4,y4] (four corners) in ORIGINAL, pre-upscale image pixel
+    coordinates. Injected as extra text regions with prob=1.0 after normal detection runs,
+    and burned into the inpainting mask so they get erased and retranslated like any other
+    detected text."""
     box_threshold: float = 0.2
     """Threshold for bbox generation"""
     unclip_ratio: float = 2.3
@@ -323,6 +337,11 @@ class Config(BaseModel):
     """Set the convolution kernel size of the text erasure area to completely clean up text residues"""
     mask_dilation_offset: int = 20
     """By how much to extend the text mask to remove left-over text pixels of the original image."""
+    ocr_preview_only: bool = False
+    """If true, stop the pipeline right after OCR/textline-merge (before translation,
+    inpainting, or rendering) and return the recognized text regions instead of a
+    translated image. Used by the web UI's "Preview OCR" button so a user can check what
+    the detector/OCR caught before committing to a full translate."""
     _filter_text = None
 
     @property

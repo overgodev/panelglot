@@ -20,6 +20,7 @@ from .utils import (
     LANGUAGE_ORIENTATION_PRESETS,
     ModelWrapper,
     Context,
+    Quadrilateral,
     load_image,
     dump_image,
     visualize_textblocks,
@@ -490,6 +491,8 @@ class MangaTranslator:
         if self.verbose and ctx.mask_raw is not None:
             cv2.imwrite(self._result_path('mask_raw.png'), ctx.mask_raw)
 
+        self._inject_manual_text_boxes(config, ctx)
+
         if not ctx.textlines:
             await self._report_progress('skip-no-regions', True)
             # If no text was found result is intermediate image product
@@ -530,9 +533,13 @@ class MangaTranslator:
 
         if self.verbose and ctx.text_regions:
             show_panels = not config.force_simple_sort  # 当不使用简单排序时显示panel
-            bboxes = visualize_textblocks(cv2.cvtColor(ctx.img_rgb, cv2.COLOR_BGR2RGB), ctx.text_regions, 
+            bboxes = visualize_textblocks(cv2.cvtColor(ctx.img_rgb, cv2.COLOR_BGR2RGB), ctx.text_regions,
                                         show_panels=show_panels, img_rgb=ctx.img_rgb, right_to_left=config.render.rtl)
             cv2.imwrite(self._result_path('bboxes.png'), bboxes)
+
+        if config.ocr_preview_only:
+            await self._report_progress('finished', True)
+            return ctx
 
         # Apply pre-dictionary after textline merge
         pre_dict = load_dictionary(self.pre_dict)
@@ -692,6 +699,28 @@ class MangaTranslator:
         current_time = time.time()
         self._model_usage_timestamps[("upscaling", config.upscale.upscaler)] = current_time
         return (await dispatch_upscaling(config.upscale.upscaler, [ctx.img_colorized], config.upscale.upscale_ratio, self.device))[0]
+
+    def _inject_manual_text_boxes(self, config: Config, ctx: Context):
+        """Merges user-drawn rectangles (web UI box/lasso tool, for text the detector missed)
+        into ctx.textlines/mask/mask_raw. See DetectorConfig.manual_text_boxes."""
+        if not config.detector.manual_text_boxes:
+            return
+        in_w, in_h = ctx.input.size
+        img_h, img_w = ctx.img_rgb.shape[:2]
+        scale_x, scale_y = img_w / in_w, img_h / in_h
+        if ctx.mask_raw is None:
+            ctx.mask_raw = np.zeros((img_h, img_w), dtype=np.uint8)
+        if ctx.mask is None:
+            ctx.mask = np.zeros((img_h, img_w), dtype=np.uint8)
+        ctx.textlines = list(ctx.textlines or [])
+        for box in config.detector.manual_text_boxes:
+            pts = np.array(box, dtype=np.float32).reshape(4, 2)
+            pts[:, 0] *= scale_x
+            pts[:, 1] *= scale_y
+            pts = pts.astype(np.int32)
+            ctx.textlines.append(Quadrilateral(pts, '', 1.0))
+            cv2.fillPoly(ctx.mask_raw, [pts], 255)
+            cv2.fillPoly(ctx.mask, [pts], 255)
 
     async def _run_detection(self, config: Config, ctx: Context):
         current_time = time.time()
@@ -1762,6 +1791,8 @@ class MangaTranslator:
 
         if self.verbose and ctx.mask_raw is not None:
             cv2.imwrite(self._result_path('mask_raw.png'), ctx.mask_raw)
+
+        self._inject_manual_text_boxes(config, ctx)
 
         if not ctx.textlines:
             await self._report_progress('skip-no-regions', True)

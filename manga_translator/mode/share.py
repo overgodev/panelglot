@@ -13,7 +13,7 @@ from PIL import Image
 from starlette.responses import StreamingResponse
 
 from manga_translator import Config, Context, MangaTranslator
-from manga_translator.mode.response import to_translation
+from manga_translator.mode.response import to_translation, to_ocr_preview
 
 
 def _decode_image(image_b64: str) -> Image.Image:
@@ -33,6 +33,8 @@ def _serialize_context(ctx: Context, output_format: str) -> Optional[bytes]:
         return to_translation(ctx).model_dump_json().encode("utf-8")
     if output_format == "bytes":
         return to_translation(ctx).to_bytes()
+    if output_format == "ocr_preview":
+        return to_ocr_preview(ctx).model_dump_json().encode("utf-8")
     raise HTTPException(status_code=400, detail=f"Unknown output_format: {output_format}")
 
 
@@ -85,8 +87,21 @@ class MangaShare:
             config = self._build_config(body)
             return await self.manga.translate(image, config)
         elif method_name == "translate_batch":
-            config = self._build_config(body)
-            images_with_configs = [(_decode_image(b), config) for b in body["images_b64"]]
+            images_b64 = body["images_b64"]
+            configs_raw = body.get("configs")
+            extras_raw = body.get("configs_extra") or [{}] * len(images_b64)
+            if configs_raw is None:
+                # Back-compat with a caller still sending one shared `config`.
+                shared = self._build_config(body)
+                images_with_configs = [(_decode_image(b), shared) for b in images_b64]
+            else:
+                configs = []
+                for raw, extra in zip(configs_raw, extras_raw):
+                    cfg = Config.model_validate(raw)
+                    for key, value in extra.items():
+                        setattr(cfg, key, value)
+                    configs.append(cfg)
+                images_with_configs = [(_decode_image(b), c) for b, c in zip(images_b64, configs)]
             batch_size = body.get("batch_size", 4)
             return await self.manga.translate_batch(images_with_configs, batch_size)
         else:
