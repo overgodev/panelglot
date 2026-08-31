@@ -3,7 +3,6 @@ from typing import List, Tuple
 import cv2
 import numpy as np
 
-from .panel import get_panels_from_array
 from .textblock import TextBlock
 
 
@@ -23,6 +22,7 @@ def sort_regions(
     # 1. Panel detection + sorting within panels
     if img is not None:
         try:
+            from .panel import get_panels_from_array
             panels_raw = get_panels_from_array(img, rtl=right_to_left)
             # Convert to [x1, y1, x2, y2]
             panels = [(x, y, x + w, y + h) for x, y, w, h in panels_raw]
@@ -204,6 +204,7 @@ def visualize_textblocks(canvas: np.ndarray, blk_list: List[TextBlock], show_pan
     panels = None
     if show_panels and img_rgb is not None:
         try:
+            from .panel import get_panels_from_array
             panels_raw = get_panels_from_array(img_rgb, rtl=right_to_left)
             panels = [(x, y, x + w, y + h) for x, y, w, h in panels_raw]
             # Use the customised sorter that keeps vertically stacked panels together.
