@@ -29,7 +29,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
+!manga_translator/utils/panel/lib/
 lib64/
 parts/
 sdist/
